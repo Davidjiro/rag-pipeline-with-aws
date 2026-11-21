@@ -81,3 +81,6 @@ temp/
 # synthesise. When the real UI build is wired in, add `web/dist/*` and `!web/dist/index.html`
 # (or generate the placeholder in CI) so build output is never committed.
 # ---------------------------------------------------------------------------------------------
+.coverage
+htmlcov/
+.ruff_cache/

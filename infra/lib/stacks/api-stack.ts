@@ -35,6 +35,7 @@ export class ApiStack extends Stack {
       table: props.table,
       docsBucket: props.knowledge.docsBucket,
       knowledgeBaseId: props.knowledge.knowledgeBase.knowledgeBaseId,
+      dataSourceId: props.knowledge.knowledgeBase.dataSourceId,
       knowledgeBaseArn: props.knowledge.knowledgeBase.knowledgeBaseArn,
       agentRuntimeArn: props.agent.runtime.runtimeArn,
       userPool: props.auth.pool.userPool,

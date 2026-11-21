@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # smoke-test.sh [dev|prod]
 #
-# RUN AFTER `cdk deploy`. Proves the deployed infrastructure is wired together, using only the placeholder app code of the
-# infrastructure stage. It creates one tiny object in the documents bucket and deletes it again. It does NOT call a model.
+# RUN AFTER `cdk deploy`. Proves the deployed infrastructure is wired together, using the real ingest function and the placeholder
+# agent. It creates one tiny object in the documents bucket and deletes it again. It does NOT call a model.
 #
 #   1  web          CloudFront serves the app shell
 #   2  spa routing  a deep link such as /projects/123 returns the app shell (the CloudFront Function)
@@ -11,7 +11,7 @@
 #   5  agent        AgentCore Runtime answers an invocation
 #   6  sign-in      Cognito self sign-up is disabled
 #   7  knowledge    Knowledge Base ACTIVE and its S3 data source AVAILABLE
-#   8  ingest       an upload under projects/ invokes the ingest Lambda (a log line proves it)
+#   8  ingest       an upload under projects/ invokes the ingest Lambda (its log line proves it; the object has no document record, so the function skips it)
 #
 # Exit code 1 if any check fails.
 
@@ -64,17 +64,17 @@ ds="$(aws --region "$REGION" bedrock-agent get-data-source --knowledge-base-id "
 [ "$ds" = "AVAILABLE" ] && pass "7b data source is AVAILABLE" || fail "7b data source status: ${ds}"
 
 printf '\n[8] Upload trigger\n'
-KEY="projects/smoke-test/$(date +%s)/hello.txt"
+DOC="$(date +%s)"; KEY="projects/smoke-test/${DOC}/hello.txt"
 echo "smoke test" | aws --region "$REGION" s3 cp - "s3://${BUCKET}/${KEY}" >/dev/null 2>&1 && pass "8a object written under projects/" || fail "8a could not write to the documents bucket"
 # CDK creates the log group itself (to set the retention), so ask Lambda for its name instead of guessing it.
 LOG_GROUP="$(aws --region "$REGION" lambda get-function-configuration --function-name "$INGEST" --query 'LoggingConfig.LogGroup' --output text 2>/dev/null)"
 found=""
 for _ in 1 2 3 4 5 6; do
   sleep 5
-  found="$(aws --region "$REGION" logs filter-log-events --log-group-name "$LOG_GROUP" --filter-pattern "\"${KEY}\"" --query 'events[0].message' --output text 2>/dev/null || true)"
+  found="$(aws --region "$REGION" logs filter-log-events --log-group-name "$LOG_GROUP" --filter-pattern "\"${DOC}\"" --query 'events[0].message' --output text 2>/dev/null || true)"
   { [ -n "$found" ] && [ "$found" != "None" ]; } && break
 done
-{ [ -n "$found" ] && [ "$found" != "None" ]; } && pass "8b ingest function logged the upload" || fail "8b no ingest log line for ${KEY} after 30 s (log group ${LOG_GROUP})"
+{ [ -n "$found" ] && [ "$found" != "None" ]; } && pass "8b ingest function handled the upload (it has no record for it and skips it)" || fail "8b no ingest log line for ${DOC} after 30 s (log group ${LOG_GROUP})"
 aws --region "$REGION" s3 rm "s3://${BUCKET}/${KEY}" >/dev/null 2>&1 || true
 
 printf '\n'

@@ -10,7 +10,8 @@
 #   4 synth       cdk synth with the cdk-nag AwsSolutions rules (a finding is an error)
 #   5 cfn-lint    every template against AWS's CloudFormation resource schemas
 #   6 AWS check   `aws cloudformation validate-template` (read-only), when credentials exist
-#   7 python      the placeholder app code compiles
+#   7 python      the application sources compile
+#   8 backend     ruff lint + format check, pytest (API, ingest, contracts) with fakes for AWS
 #
 # A layer that cannot run (for example cfn-lint is not installed) is reported as SKIPPED, never as passed.
 
@@ -57,9 +58,20 @@ if command -v aws >/dev/null 2>&1 && aws sts get-caller-identity >/dev/null 2>&1
   run "6 AWS validate-template (read-only)" validate
 else skip "6 AWS validate-template" "no AWS credentials"; fi
 
-pycheck() { python3 -m py_compile "$ROOT"/backend/api/app/*.py "$ROOT"/backend/ingest/*.py "$ROOT"/agent/app/*.py; local rc=$?
+pycheck() { python3 -m py_compile "$ROOT"/backend/api/app/*.py "$ROOT"/backend/api/app/routes/*.py "$ROOT"/backend/ingest/*.py "$ROOT"/agent/app/*.py; local rc=$?
   find "$ROOT" -name __pycache__ -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; return $rc; }
 run "7 python sources compile" pycheck
+
+backend() {
+  local py="${BACKEND_PYTHON:-python3}" rc=0
+  (cd "$ROOT/backend" && "$py" -m ruff check . && "$py" -m ruff format --check . && "$py" -m pytest) || rc=1
+  find "$ROOT/backend" -name __pycache__ -o -name .pytest_cache | xargs rm -rf 2>/dev/null
+  return $rc
+}
+BACKEND_PY="${BACKEND_PYTHON:-python3}"
+if "$BACKEND_PY" -c "import fastapi, moto, pytest" >/dev/null 2>&1 && "$BACKEND_PY" -m ruff --version >/dev/null 2>&1; then
+  run "8 backend (ruff, pytest)" backend
+else skip "8 backend" "dependencies missing: pip install -r backend/api/requirements.txt -r backend/requirements-dev.txt"; fi
 
 printf '\n==================== SUMMARY ====================\n'
 for r in "${RESULTS[@]}"; do printf '  %-8s %s\n' "${r#*|}" "${r%%|*}"; done

@@ -75,6 +75,7 @@ export class ApiFunction extends Construct {
         DOCS_BUCKET: props.docsBucket.bucketName,
         DOCS_PREFIX: props.docsPrefix,
         KNOWLEDGE_BASE_ID: props.knowledgeBaseId,
+        DATA_SOURCE_ID: props.dataSourceId,
         AGENT_RUNTIME_ARN: props.agentRuntimeArn,
         // How the app verifies the caller's JWT.
         COGNITO_USER_POOL_ID: props.userPool.userPoolId,
@@ -112,6 +113,15 @@ export class ApiFunction extends Construct {
         sid: 'DocumentObjects',
         actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
         resources: [props.docsBucket.arnForObjects(`${props.docsPrefix}*`)],
+      }),
+    );
+    // Deleting a project lists its folder first. Listing is limited to the documents prefix.
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ListDocuments',
+        actions: ['s3:ListBucket'],
+        resources: [props.docsBucket.bucketArn],
+        conditions: { StringLike: { 's3:prefix': [`${props.docsPrefix}*`] } },
       }),
     );
     this.function.addToRolePolicy(

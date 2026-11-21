@@ -214,6 +214,7 @@ describe('api stack', () => {
         'TABLE_NAME',
         'DOCS_BUCKET',
         'KNOWLEDGE_BASE_ID',
+        'DATA_SOURCE_ID',
         'AGENT_RUNTIME_ARN',
         'COGNITO_USER_POOL_ID',
         'COGNITO_CLIENT_ID',

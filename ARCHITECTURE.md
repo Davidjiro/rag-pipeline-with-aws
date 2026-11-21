@@ -13,7 +13,7 @@ Under normal use the cost is dominated by model tokens (section 11).
 |-------|-------|--------|
 | 1 | Architecture (this document) | done |
 | 2 | **CDK infrastructure** (`infra/`), with placeholder application code so every image and asset builds | **done and verified**: format, types, unit tests, cdk-nag, cfn-lint, AWS template validation, local arm64 container checks. Deployed once to a development account, smoke-tested, then destroyed |
-| 3 | Backend: FastAPI routes and the ingest Lambda | next |
+| 3 | **Backend** (`backend/`): FastAPI routes and the ingest Lambda | **done and verified**: 126 tests (auth, tenancy, uploads, indexing state, streaming, deletion, ingest) with simulated AWS, lint, arm64 image import check. Not yet exercised against real AWS |
 | 4 | Agent: Strands agent, search tool, streaming and citations | planned |
 | 5 | Web UI: React app | planned |
 
@@ -336,6 +336,23 @@ On-demand billing, no point-in-time recovery, TTL on short-lived items. Access p
 
 | Entity | Partition key | Sort key | Main attributes |
 |--------|---------------|----------|-----------------|
+| Project | `USER#<sub>` | `PROJECT#<id>` | name, owner_id, created_at |
+| Document | `PROJECT#<id>` | `DOC#<id>` | filename, content_type, owner_id, status, warning, failure_reason, created_at, updated_at, `ttl` while `PENDING_UPLOAD` |
+| Chat | `PROJECT#<id>` | `CHAT#<id>` | title, strategy (`basic` or `multi_query`), owner_id, created_at |
+| Message | `CHAT#<id>` | `MSG#<timestamp>#<id>` | role, text, citations (JSON text), created_at |
+| Daily usage | `USER#<sub>` | `USAGE#<yyyy-mm-dd>` | questions, ttl 3 days |
+
+Every request first reads the project item with `USER#<sub>` + `PROJECT#<id>`: that read is the ownership check, and it is a dependency of every
+project route, so a route cannot skip it. Chats are addressed through their project (`/projects/{id}/chats/{chatId}`), which needs no secondary index.
+
+Notes from the implementation:
+
+- A document that is never uploaded expires through `ttl` (2 hours). The ingest function removes `ttl` in the same conditional write that moves the record to `INGESTING`, so an indexed document never expires. DynamoDB deletes expired items lazily, so `ttl` is never used for a security decision.
+- The daily cap is one conditional `UpdateItem` (`ADD` while below the cap), so parallel requests cannot exceed it.
+- Document status is refreshed when the file list is read, in batches of 10 (the API limit). `PARTIALLY_INDEXED` shows as `READY` with a warning, `NOT_FOUND` is treated as pending for 5 minutes and then as failed, and a document still indexing after 30 minutes is marked `FAILED`.
+- Deleting a project removes its documents from the index first. If that fails the request stops with 502 and nothing else is deleted, so no vectors outlive their source file.
+
+--------|---------------|----------|-----------------|
 | Project | `USER#<sub>` | `PROJECT#<id>` | name, description, retrieval_strategy, created_at |
 | Document | `PROJECT#<id>` | `DOC#<id>` | filename, s3_key, size, type, status, failure_reason, created_at, ttl while pending |
 | Chat | `PROJECT#<id>` | `CHAT#<id>` | title, created_at |
@@ -354,18 +371,19 @@ All routes sit under `/api` and need `Authorization: Bearer <JWT>`.
 | Method and path | Purpose |
 |-----------------|---------|
 | `GET /projects`, `POST /projects` | list, create |
-| `GET /projects/{id}`, `DELETE /projects/{id}` | read, delete (and remove its documents) |
-| `GET /projects/{id}/settings`, `PUT /projects/{id}/settings` | read or change the retrieval strategy (`basic` or `multi-query`) |
-| `GET /projects/{id}/files` | list documents, reconcile `INGESTING` ones |
-| `POST /projects/{id}/files/upload-url` | document record + presigned POST |
-| `GET /projects/{id}/files/{fileId}/download-url` | short-lived link to open a source |
-| `DELETE /projects/{id}/files/{fileId}` | remove from KB, S3 and DynamoDB |
-| `POST /projects/{id}/retrieve` | test retrieval: top chunks and scores for a query |
-| `GET /projects/{id}/chats`, `POST /projects/{id}/chats` | list, create |
-| `GET /chats/{id}`, `DELETE /chats/{id}` | read with messages, delete |
-| `POST /projects/{id}/chats/{chatId}/messages/stream` | ask a question, stream the answer (SSE) |
+| `GET /projects/{id}`, `DELETE /projects/{id}` | read, delete (index entries, files, records) |
+| `POST /projects/{id}/files` | document record + presigned POST (type, size and key fixed by the signed policy) |
+| `GET /projects/{id}/files` | list documents, refresh the status of those being indexed |
+| `DELETE /projects/{id}/files/{docId}` | remove from the index, S3 and DynamoDB |
+| `POST /projects/{id}/retrieve` | test retrieval: top passages and scores for a query (`basic` strategy, no model call) |
+| `GET /projects/{id}/chats`, `POST /projects/{id}/chats` | list, create (the body picks the strategy) |
+| `DELETE /projects/{id}/chats/{chatId}` | delete a chat and its messages |
+| `GET /projects/{id}/chats/{chatId}/messages` | read the conversation |
+| `POST /projects/{id}/chats/{chatId}/messages` | ask a question, stream the answer (SSE: `token`, `citations`, `done`, `error`) |
 | `GET /health` | no auth, for monitoring |
-| not planned: a browser "confirm upload" call, URL ingestion | replaced by the S3 event, out of v1 |
+| not planned: a browser "confirm upload" call, URL ingestion, a separate download-link route | the S3 event replaces the first; citations carry short-lived links |
+
+The contract between the API and the agent (request payload, JSON or event-stream reply, and why citations are filtered) is in `backend/api/app/README.md`.
 
 ---
 

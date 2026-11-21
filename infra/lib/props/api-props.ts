@@ -18,6 +18,8 @@ export interface ApiFunctionProps {
   /** Key prefix the API may read, write and delete in the docs bucket, for example `projects/`. */
   readonly docsPrefix: string;
   readonly knowledgeBaseId: string;
+  /** Required by the document status and delete calls, which address a document by data source. */
+  readonly dataSourceId: string;
   readonly knowledgeBaseArn: string;
   readonly agentRuntimeArn: string;
   readonly userPool: cognito.IUserPool;

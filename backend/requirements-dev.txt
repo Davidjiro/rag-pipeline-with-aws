@@ -1,0 +1,7 @@
+# Everything needed to lint and test the backend locally and in CI.
+-r api/requirements.txt
+moto[dynamodb,s3]==5.2.5
+pytest==9.2.0
+pytest-cov==7.1.0
+httpx==0.28.1
+ruff==0.17.6

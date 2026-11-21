@@ -1,6 +1,6 @@
 name: ci
 
-# Runs the same verification as `npm run verify`. It never deploys and needs no AWS credentials, so the
+# Runs the same verification as `npm run verify` (infrastructure checks and the backend lint and tests). It never deploys and needs no AWS credentials, so the
 # "AWS validate-template" layer is reported as SKIPPED here and runs on a developer machine.
 on:
   push:
@@ -26,6 +26,6 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci --prefix infra
-          pip install cfn-lint
-      - name: Verify (format, types, tests, synth with cdk-nag, cfn-lint)
+          pip install cfn-lint -r backend/api/requirements.txt -r backend/requirements-dev.txt
+      - name: Verify (format, types, tests, synth with cdk-nag, cfn-lint, backend lint and tests)
         run: bash scripts/verify.sh

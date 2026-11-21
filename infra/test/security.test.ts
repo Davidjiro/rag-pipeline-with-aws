@@ -138,6 +138,14 @@ describe('IAM', () => {
     expect(asArray<string>(statement.Action).sort()).toEqual(['s3:DeleteObject', 's3:GetObject', 's3:PutObject']);
   });
 
+  test('the API may list the bucket only under the documents prefix', () => {
+    const statement = iamStatements(app.template('api')).find((s) =>
+      asArray<string>(s.Action).includes('s3:ListBucket'),
+    )!;
+    expect(asArray<string>(statement.Action)).toEqual(['s3:ListBucket']);
+    expect(statement.Condition).toEqual({ StringLike: { 's3:prefix': ['projects/*'] } });
+  });
+
   test('the ingest role can only start ingestion, update document items, and write its own logs', () => {
     const policies = app.template('knowledge').findResources('AWS::IAM::Policy');
     const ingest = Object.entries(policies).find(([id]) => id.startsWith('IngestFunction'));

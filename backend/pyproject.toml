@@ -1,0 +1,24 @@
+# Tooling configuration for the backend (API and ingest function): lint, format and tests.
+# The runtime dependencies live in api/requirements.txt, the development ones in requirements-dev.txt.
+
+[tool.ruff]
+line-length = 130
+target-version = "py313"
+extend-exclude = ["**/__pycache__"]
+
+[tool.ruff.lint]
+# E/F: pycodestyle and pyflakes. I: import order. B: likely bugs. UP: modern syntax. S: security (bandit rules).
+select = ["E", "F", "I", "B", "UP", "S", "C4", "SIM"]
+ignore = [
+  "B008",  # FastAPI declares dependencies as default arguments: Depends(...)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106"]  # asserts and throw-away test secrets are fine in tests
+
+[tool.pytest.ini_options]
+# `api` holds the package `app`, `ingest` holds the module `handler`.
+pythonpath = ["api", "ingest"]
+testpaths = ["tests", "api/tests", "ingest/tests"]
+addopts = "-q"
+filterwarnings = ["ignore:Using .httpx. with .starlette.testclient", "ignore::DeprecationWarning:botocore.*", "ignore::DeprecationWarning:moto.*"]

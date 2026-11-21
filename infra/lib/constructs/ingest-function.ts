@@ -55,7 +55,8 @@ export class IngestFunction extends Construct {
       runtime: lambda.Runtime.PYTHON_3_15,
       architecture: lambda.Architecture.ARM_64,
       handler: 'handler.main',
-      code: lambda.Code.fromAsset(props.codeDir),
+      // Ship only the handler: tests and docs stay out of the deployment package.
+      code: lambda.Code.fromAsset(props.codeDir, { exclude: ['tests', '__pycache__', '*.md', '.pytest_cache'] }),
       memorySize: 256,
       timeout: Duration.seconds(60),
       reservedConcurrentExecutions: props.reservedConcurrency,
