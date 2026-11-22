@@ -92,6 +92,16 @@ def test_agent_event_stream_response():
     assert [e["type"] for e in run_agent(FakeRuntime("text/event-stream", body))] == ["token", "citations"]
 
 
+@pytest.mark.parametrize(
+    "error_line",
+    [b'data: {"error":"boom","message":"An error occurred during streaming"}', b'data: {"type":"error","message":"x"}'],
+)
+def test_agent_error_event_aborts_the_answer(error_line):
+    body = b'data: {"type":"token","text":"partial"}\n\n' + error_line + b"\n\n"
+    with pytest.raises(AgentError):
+        run_agent(FakeRuntime("text/event-stream", body))
+
+
 @pytest.mark.parametrize("body", [b"not json", b'{"no":"answer"}', b'["list"]'])
 def test_agent_bad_json(body):
     with pytest.raises(AgentError):

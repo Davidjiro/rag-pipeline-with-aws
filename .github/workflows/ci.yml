@@ -1,7 +1,7 @@
 name: ci
 
-# Runs the same verification as `npm run verify` (infrastructure checks and the backend lint and tests). It never deploys and needs no AWS credentials, so the
-# "AWS validate-template" layer is reported as SKIPPED here and runs on a developer machine.
+# Runs the same verification as `npm run verify`: infrastructure checks plus backend and agent lint and tests.
+# It never deploys and needs no AWS credentials, so the "AWS validate-template" layer is reported as SKIPPED here.
 on:
   push:
   pull_request:
@@ -27,5 +27,9 @@ jobs:
         run: |
           npm ci --prefix infra
           pip install cfn-lint -r backend/api/requirements.txt -r backend/requirements-dev.txt
-      - name: Verify (format, types, tests, synth with cdk-nag, cfn-lint, backend lint and tests)
-        run: bash scripts/verify.sh
+      - name: Create the agent environment (its dependencies are separate from the backend's)
+        run: |
+          python -m venv /tmp/agent-venv
+          /tmp/agent-venv/bin/pip install -r agent/requirements.txt -r agent/requirements-dev.txt
+      - name: Verify (format, types, tests, synth with cdk-nag, cfn-lint, backend and agent lint and tests)
+        run: AGENT_PYTHON=/tmp/agent-venv/bin/python bash scripts/verify.sh

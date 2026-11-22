@@ -14,7 +14,7 @@ Under normal use the cost is dominated by model tokens (section 11).
 | 1 | Architecture (this document) | done |
 | 2 | **CDK infrastructure** (`infra/`), with placeholder application code so every image and asset builds | **done and verified**: format, types, unit tests, cdk-nag, cfn-lint, AWS template validation, local arm64 container checks. Deployed once to a development account, smoke-tested, then destroyed |
 | 3 | **Backend** (`backend/`): FastAPI routes and the ingest Lambda | **done and verified**: 126 tests (auth, tenancy, uploads, indexing state, streaming, deletion, ingest) with simulated AWS, lint, arm64 image import check. Not yet exercised against real AWS |
-| 4 | Agent: Strands agent, search tool, streaming and citations | planned |
+| 4 | **Agent** (`agent/`): Strands agent, search tool, streaming and citations | **done and verified**: 47 tests (the real Strands loop with a scripted model), lint, arm64 container started and answered `/ping` and `/invocations`. Not yet run against real Bedrock |
 | 5 | Web UI: React app | planned |
 
 ### Findings during implementation (all reflected in this document)

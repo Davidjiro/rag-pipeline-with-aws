@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # smoke-test.sh [dev|prod]
 #
-# RUN AFTER `cdk deploy`. Proves the deployed infrastructure is wired together, using the real ingest function and the placeholder
-# agent. It creates one tiny object in the documents bucket and deletes it again. It does NOT call a model.
+# RUN AFTER `cdk deploy`. Proves the deployed infrastructure is wired together, using the real ingest function and agent. It creates one tiny object in the documents bucket and deletes it again. It does NOT call a model.
 #
 #   1  web          CloudFront serves the app shell
 #   2  spa routing  a deep link such as /projects/123 returns the app shell (the CloudFront Function)
@@ -50,8 +49,9 @@ code="$(curl -sS -o /tmp/kc-health2 -w '%{http_code}' "${API%/}/api/health" 2>/d
 printf '\n[5] Agent\n'
 reply="$(aws --region "$REGION" bedrock-agentcore invoke-agent-runtime --agent-runtime-arn "$RUNTIME" \
   --runtime-session-id "smoke-test-session-$(date +%s)-0123456789abcdef" --content-type application/json \
-  --cli-binary-format raw-in-base64-out --payload '{"prompt":"ping"}' /tmp/kc-agent.json >/dev/null 2>&1 && cat /tmp/kc-agent.json || true)"
-echo "$reply" | grep -q "placeholder agent" && pass "5 AgentCore Runtime answered" || fail "5 AgentCore invocation failed: ${reply}"
+  --cli-binary-format raw-in-base64-out --payload '{"text":"ping"}' /tmp/kc-agent.json >/dev/null 2>&1 && cat /tmp/kc-agent.json || true)"
+# An incomplete request is rejected by the real agent before any model call, so this check costs nothing.
+echo "$reply" | grep -q "'user_id' is missing" && pass "5 AgentCore Runtime runs the agent (rejected an incomplete request, no model call)" || fail "5 AgentCore invocation failed: ${reply}"
 
 printf '\n[6] Sign-in\n'
 only="$(aws --region "$REGION" cognito-idp describe-user-pool --user-pool-id "$POOL" --query 'UserPool.AdminCreateUserConfig.AllowAdminCreateUserOnly' --output text 2>/dev/null)"

@@ -54,6 +54,10 @@ class AgentClient:
         try:
             if "text/event-stream" in content_type:
                 for event in parse_events(body.iter_lines()):
+                    # The AgentCore SDK reports a failure inside a stream as {"error": ...}; the agent itself sends type "error".
+                    # Either way the answer is incomplete and must not be saved.
+                    if event.get("type") == "error" or "error" in event:
+                        raise AgentError("The agent reported an error while streaming.")
                     if event.get("type") in ("token", "citations"):
                         yield event
                 return

@@ -4,7 +4,7 @@ A web app for uploading documents into a project knowledge base and chatting wit
 Built on Amazon Bedrock (Knowledge Bases on S3 Vectors, Guardrails) and Bedrock AgentCore, deployed with TypeScript CDK.
 Designed to be cheap: nothing bills by the hour, and cost is dominated by model tokens.
 
-**Status: infrastructure (deployed once and smoke-tested) and backend (API and ingest function, tested with simulated AWS) are implemented. The agent and the UI are the next stages.**
+**Status: infrastructure (deployed once and smoke-tested), backend and agent are implemented and tested with simulated AWS. The UI is the next stage. The backend and agent have not yet run together against real AWS.**
 Start with [ARCHITECTURE.md](ARCHITECTURE.md) (the design, cost model and risks) and [infra/README.md](infra/README.md) (the deployment runbook).
 
 ```
@@ -12,7 +12,7 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md) (the design, cost model and risks)
 ├── ARCHITECTURE.md      <- diagrams, flows, decisions, cost model, risks
 ├── infra/               <- CDK app: six stacks, 70+ tests, cdk-nag security checks        [done]
 ├── backend/             <- FastAPI API and the S3-triggered ingest Lambda                  [done: 126 tests]
-├── agent/               <- the chat agent container for AgentCore Runtime                  [placeholder]
+├── agent/               <- the chat agent container for AgentCore Runtime                  [done: 47 tests]
 ├── web/                 <- single-page app, published through CloudFront                   [placeholder]
 ├── scripts/             <- verify, preflight, smoke test, log retention
 └── .github/workflows/   <- CI: the same verification, no deployment, no credentials

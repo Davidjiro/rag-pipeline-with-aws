@@ -12,6 +12,7 @@
 #   6 AWS check   `aws cloudformation validate-template` (read-only), when credentials exist
 #   7 python      the application sources compile
 #   8 backend     ruff lint + format check, pytest (API, ingest, contracts) with fakes for AWS
+#   9 agent       ruff lint + format check, pytest (real Strands loop with a scripted model; no model calls)
 #
 # A layer that cannot run (for example cfn-lint is not installed) is reported as SKIPPED, never as passed.
 
@@ -72,6 +73,17 @@ BACKEND_PY="${BACKEND_PYTHON:-python3}"
 if "$BACKEND_PY" -c "import fastapi, moto, pytest" >/dev/null 2>&1 && "$BACKEND_PY" -m ruff --version >/dev/null 2>&1; then
   run "8 backend (ruff, pytest)" backend
 else skip "8 backend" "dependencies missing: pip install -r backend/api/requirements.txt -r backend/requirements-dev.txt"; fi
+
+agent_checks() {
+  local py="${AGENT_PYTHON:-python3}" rc=0
+  (cd "$ROOT/agent" && "$py" -m ruff check . && "$py" -m ruff format --check . && "$py" -m pytest) || rc=1
+  find "$ROOT/agent" -name __pycache__ -o -name .pytest_cache | xargs rm -rf 2>/dev/null
+  return $rc
+}
+AGENT_PY="${AGENT_PYTHON:-python3}"
+if "$AGENT_PY" -c "import strands, bedrock_agentcore, pytest, pytest_asyncio, httpx" >/dev/null 2>&1 && "$AGENT_PY" -m ruff --version >/dev/null 2>&1; then
+  run "9 agent (ruff, pytest)" agent_checks
+else skip "9 agent" "dependencies missing: pip install -r agent/requirements.txt -r agent/requirements-dev.txt (separate venv from the backend)"; fi
 
 printf '\n==================== SUMMARY ====================\n'
 for r in "${RESULTS[@]}"; do printf '  %-8s %s\n' "${r#*|}" "${r%%|*}"; done
