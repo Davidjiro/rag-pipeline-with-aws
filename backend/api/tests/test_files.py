@@ -38,7 +38,9 @@ def test_request_upload_returns_locked_down_presigned_post(api, store):
     assert record["owner_id"] == "alice" and record["status"] == "PENDING_UPLOAD" and "ttl" in record
 
 
-@pytest.mark.parametrize("name", ["virus.exe", "noextension", "script.js", ".pdf", "a.PDF.exe"])
+@pytest.mark.parametrize(
+    "name", ["virus.exe", "noextension", "script.js", ".pdf", "a.PDF.exe", "x.pdf.metadata.json", "x.METADATA.JSON"]
+)
 def test_unsupported_names_are_rejected(api, name):
     pid = make_project(api)
     assert api.post(f"/projects/{pid}/files", json={"filename": name}).status_code == 422
@@ -135,6 +137,7 @@ def test_delete_file(api, store, s3, kb):
     pid = make_project(api)
     doc_id, uri = ingesting_doc(api, store, pid)
     s3.put_object(Bucket="test-docs", Key=f"projects/{pid}/{doc_id}/a.txt", Body=b"x")
+    s3.put_object(Bucket="test-docs", Key=f"projects/{pid}/{doc_id}/a.txt.metadata.json", Body=b"{}")
 
     assert api.delete(f"/projects/{pid}/files/{doc_id}").status_code == 204
 

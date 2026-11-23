@@ -1,15 +1,15 @@
-# lib/props/  -  the contracts
+# lib/props/ - the contracts
 
 A **props interface** lists every input a construct needs. It is the construct's public API.
 
-| File | Interfaces |
-|------|------------|
-| `auth-props.ts` | `InviteOnlyUserPoolProps` |
-| `data-props.ts` | `AppTableProps`, `BudgetAlertProps` |
+| File                 | Interfaces                                                               |
+| -------------------- | ------------------------------------------------------------------------ |
+| `auth-props.ts`      | `InviteOnlyUserPoolProps`                                                |
+| `data-props.ts`      | `AppTableProps`, `BudgetAlertProps`                                      |
 | `knowledge-props.ts` | `SecureBucketProps`, `S3VectorKnowledgeBaseProps`, `IngestFunctionProps` |
-| `agent-props.ts` | `ChatGuardrailProps`, `ChatAgentRuntimeProps` |
-| `api-props.ts` | `ApiFunctionProps` |
-| `web-props.ts` | `WebDistributionProps` |
+| `agent-props.ts`     | `ChatGuardrailProps`, `ChatAgentRuntimeProps`                            |
+| `api-props.ts`       | `ApiFunctionProps`                                                       |
+| `web-props.ts`       | `WebDistributionProps`                                                   |
 
 ## Conventions
 

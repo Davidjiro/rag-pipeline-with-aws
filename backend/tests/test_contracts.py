@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import boto3
 import handler
 import pytest
 from app import keys
@@ -16,8 +17,9 @@ def test_ingest_parses_every_key_the_api_builds():
         assert handler.parse_key(key) == keys.parse_s3_key("projects/", key) == (PID, DID, name)
 
 
-def test_docs_prefix_matches():
+def test_docs_prefix_and_metadata_suffix_match():
     assert handler.DOCS_PREFIX == "projects/"
+    assert handler.METADATA_SUFFIX == keys.METADATA_SUFFIX
 
 
 def test_ingest_finds_the_record_the_api_wrote(monkeypatch, aws):
@@ -36,6 +38,7 @@ def test_ingest_finds_the_record_the_api_wrote(monkeypatch, aws):
     fake = FakeBedrock()
     monkeypatch.setattr(handler, "_bedrock", lambda: fake)
     handler._table.cache_clear()
+    handler._s3.cache_clear()
 
     store = Store(clients.dynamodb_table())
     project = store.create_project("alice", "P")
@@ -43,12 +46,18 @@ def test_ingest_finds_the_record_the_api_wrote(monkeypatch, aws):
     key = f"projects/{doc['project_id']}/{doc['doc_id']}/report.pdf"
 
     outcome = handler.main(
-        {"Records": [{"eventName": "ObjectCreated:Post", "s3": {"bucket": {"name": "b"}, "object": {"key": key}}}]}
+        {"Records": [{"eventName": "ObjectCreated:Post", "s3": {"bucket": {"name": "test-docs"}, "object": {"key": key}}}]}
     )
 
     assert outcome == {"started": 1}
     assert store.get_document(doc["project_id"], doc["doc_id"])["status"] == "INGESTING"
     assert "ttl" not in store.get_document(doc["project_id"], doc["doc_id"])
+    # the API deletes exactly the metadata object the ingest function wrote
+    from app import services
+    from app.config import get_settings
+
+    metadata_key = services.doc_metadata_key(get_settings(), doc)
+    assert boto3.client("s3").head_object(Bucket="test-docs", Key=metadata_key)
     handler._table.cache_clear()
 
 

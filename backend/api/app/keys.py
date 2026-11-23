@@ -41,6 +41,10 @@ CONTENT_TYPES = {
 
 MAX_FILENAME_LENGTH = 100
 
+# The ingest function stores each document's metadata (owner, project) in an object next to it, named `<file>` + this suffix.
+# The Knowledge Base reads it from there. Users must never be able to upload an object with such a name.
+METADATA_SUFFIX = ".metadata.json"
+
 
 def user_pk(user_id: str) -> str:
     return f"USER#{user_id}"

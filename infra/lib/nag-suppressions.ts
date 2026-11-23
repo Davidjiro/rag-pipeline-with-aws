@@ -91,6 +91,13 @@ export function applyNagSuppressions(config: EnvironmentConfig, stacks: AppStack
       'SERVICE: the Knowledge Base role may read `<docs bucket>/projects/*`. Object keys are created by users at upload time, ' +
       'so a prefix wildcard is the narrowest possible resource. The role cannot read anything outside that prefix.',
   });
+  Validations.of(knowledge.ingest).acknowledge({
+    id: 'AwsSolutions-IAM5',
+    reason:
+      'SERVICE: the ingest role may put `<docs bucket>/projects/*.metadata.json` only: the metadata file the Knowledge Base ' +
+      'reads next to each document. Keys are created at upload time, so a suffix wildcard is the narrowest form. It cannot ' +
+      'read any object or write a document.',
+  });
   acknowledgeHelpers(knowledge, ['BucketNotificationsHandler'], [{ id: 'AwsSolutions-IAM4', reason: HELPER_ROLE }]);
 
   // --------------------------------------------------------------- agent

@@ -28,7 +28,10 @@ def test_stream_shape_and_persistence(api, agent, store, s3):
     agent.script = [
         {"type": "token", "text": "Refunds take "},
         {"type": "token", "text": "30 days."},
-        {"type": "citations", "citations": [{"source": f"s3://test-docs/{key}", "snippet": "30 days", "score": 0.8}]},
+        {
+            "type": "citations",
+            "citations": [{"number": 1, "source": f"s3://test-docs/{key}", "snippet": "30 days", "score": 0.8}],
+        },
     ]
 
     response = ask(api, pid, cid)
@@ -39,6 +42,7 @@ def test_stream_shape_and_persistence(api, agent, store, s3):
     seen = events(response)
     assert [e["type"] for e in seen] == ["token", "token", "citations", "done"]
     cite = seen[2]["citations"][0]
+    assert cite["number"] == 1
     assert cite["filename"] == "policy.pdf" and "X-Amz-Signature" in cite["url"] and "test-docs" in cite["url"]
 
     messages = api.get(f"/projects/{pid}/chats/{cid}/messages").json()
@@ -176,3 +180,14 @@ def test_retrieve_builds_filter_from_verified_identity(api, kb):
 def test_retrieve_validation(api, body):
     pid, _ = setup_chat(api)
     assert api.post(f"/projects/{pid}/retrieve", json=body).status_code == 422
+
+
+@pytest.mark.parametrize(("raw", "kept"), [(2, 2), (True, None), ("1", None), (0, None), (5000, None), (None, None)])
+def test_citation_number_is_validated(raw, kept):
+    from app import citations
+    from app.config import get_settings
+
+    settings = get_settings()
+    pid = "55555555-5555-5555-5555-555555555555"
+    source = f"s3://test-docs/projects/{pid}/66666666-6666-6666-6666-666666666666/a.pdf"
+    assert citations.sanitize([{"number": raw, "source": source}], settings, pid)[0]["number"] == kept

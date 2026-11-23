@@ -11,8 +11,8 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md) (the design, cost model and risks)
 .
 ├── ARCHITECTURE.md      <- diagrams, flows, decisions, cost model, risks
 ├── infra/               <- CDK app: six stacks, 70+ tests, cdk-nag security checks        [done]
-├── backend/             <- FastAPI API and the S3-triggered ingest Lambda                  [done: 126 tests]
-├── agent/               <- the chat agent container for AgentCore Runtime                  [done: 47 tests]
+├── backend/             <- FastAPI API and the S3-triggered ingest Lambda                  [done: 138 tests]
+├── agent/               <- the chat agent container for AgentCore Runtime                  [done: 69 tests]
 ├── web/                 <- single-page app, published through CloudFront                   [placeholder]
 ├── scripts/             <- verify, preflight, smoke test, log retention
 └── .github/workflows/   <- CI: the same verification, no deployment, no credentials

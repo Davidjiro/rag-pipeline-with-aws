@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from . import keys
 from . import store as st
 from .config import Settings
 from .kb import KnowledgeBase, map_status
@@ -22,6 +23,10 @@ def doc_uri(settings: Settings, doc: dict) -> str:
 
 def doc_key(settings: Settings, doc: dict) -> str:
     return f"{settings.docs_prefix}{doc['project_id']}/{doc['doc_id']}/{doc['filename']}"
+
+
+def doc_metadata_key(settings: Settings, doc: dict) -> str:
+    return doc_key(settings, doc) + keys.METADATA_SUFFIX
 
 
 def reconcile_documents(settings: Settings, store: Store, kb: KnowledgeBase, docs: list[dict]) -> list[dict]:

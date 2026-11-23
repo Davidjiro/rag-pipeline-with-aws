@@ -29,6 +29,7 @@ export class KnowledgeStack extends Stack {
   public readonly docsBucket: s3.IBucket;
   public readonly docsPrefix = DOCS_PREFIX;
   public readonly knowledgeBase: S3VectorKnowledgeBase;
+  public readonly ingest: IngestFunction;
 
   constructor(scope: Construct, id: string, props: KnowledgeStackProps) {
     super(scope, id, props);
@@ -45,7 +46,7 @@ export class KnowledgeStack extends Stack {
       docsBucket: docs.bucket,
     });
 
-    new IngestFunction(this, 'IngestFunction', {
+    this.ingest = new IngestFunction(this, 'IngestFunction', {
       ...ingestConfig(env),
       bucket: docs.bucket,
       table: props.table,

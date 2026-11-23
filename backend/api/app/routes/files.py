@@ -31,6 +31,8 @@ def request_upload(
         filename = keys.sanitize_filename(body.filename)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if filename.lower().endswith(keys.METADATA_SUFFIX):
+        raise HTTPException(status_code=422, detail="This file name is reserved.")
     extension = keys.extension_of(filename)
     if extension not in settings.allowed_extensions or extension not in keys.CONTENT_TYPES:
         allowed = ", ".join(settings.allowed_extensions)
@@ -66,6 +68,8 @@ def delete_file(doc_id: UUID, project: ProjectDep, store: StoreDep, kb: KbDep, s
     if doc is None:
         raise HTTPException(status_code=404, detail="File not found.")
     services.remove_from_index(settings, kb, [doc])
-    s3.delete_object(Bucket=settings.docs_bucket, Key=services.doc_key(settings, doc))
+    # the file and the metadata object the ingest function wrote next to it
+    keys_to_delete = [services.doc_key(settings, doc), services.doc_metadata_key(settings, doc)]
+    s3.delete_objects(Bucket=settings.docs_bucket, Delete={"Objects": [{"Key": k} for k in keys_to_delete], "Quiet": True})
     store.delete_document(project["project_id"], doc["doc_id"])
     return Response(status_code=204)

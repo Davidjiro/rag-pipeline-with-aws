@@ -11,6 +11,7 @@ highly rises to the top, and duplicates collapse. S3 Vectors is semantic only, s
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -138,11 +139,21 @@ class Evidence:
                 numbered.append((number, passage))
         return numbered
 
-    def citations(self) -> list[dict]:
-        """One entry per document, in citation-number order: its best passage as the snippet."""
+    def citations(self, answer: str = "") -> list[dict]:
+        """One entry per document with its number and best passage as the snippet.
+
+        Only documents the answer refers to as [n] are kept, so the list matches the text. If the answer cites no valid number,
+        every document that was searched is listed instead, so the user can still check the sources.
+        """
         with self._lock:
             ordered = sorted(self._numbers, key=lambda source: self._numbers[source])
-            return [{"source": s, "snippet": self._best[s].text[:500], "score": self._best[s].score} for s in ordered]
+            cited = {int(n) for n in re.findall(r"\[(\d{1,3})\]", answer)}
+            if cited & set(self._numbers.values()):
+                ordered = [s for s in ordered if self._numbers[s] in cited]
+            return [
+                {"number": self._numbers[s], "source": s, "snippet": self._best[s].text[:500], "score": self._best[s].score}
+                for s in ordered
+            ]
 
 
 def format_for_model(numbered: list[tuple[int, Passage]]) -> str:

@@ -83,7 +83,7 @@ describe('IAM', () => {
     for (const statement of statements) {
       for (const resource of asArray(statement.Resource)) {
         expect(JSON.stringify(resource)).not.toBe('"*"');
-        expect(JSON.stringify(resource)).toContain('claude-haiku');
+        expect(JSON.stringify(resource)).toContain('nova-2-lite');
       }
     }
   });
@@ -146,7 +146,17 @@ describe('IAM', () => {
     expect(statement.Condition).toEqual({ StringLike: { 's3:prefix': ['projects/*'] } });
   });
 
-  test('the ingest role can only start ingestion, update document items, and write its own logs', () => {
+  test('the ingest role may write only metadata objects, never documents', () => {
+    const policies = app.template('knowledge').findResources('AWS::IAM::Policy');
+    const ingest = Object.entries(policies).find(([id]) => id.startsWith('IngestFunction'))!;
+    const statements = asArray<any>((ingest[1] as any).Properties.PolicyDocument.Statement);
+    const s3Statements = statements.filter((s) => asArray<string>(s.Action).some((a) => a.startsWith('s3:')));
+    expect(s3Statements).toHaveLength(1);
+    expect(asArray<string>(s3Statements[0].Action)).toEqual(['s3:PutObject']);
+    expect(JSON.stringify(s3Statements[0].Resource)).toContain('/projects/*.metadata.json');
+  });
+
+  test('the ingest role can only start ingestion, update document items, write metadata objects and its own logs', () => {
     const policies = app.template('knowledge').findResources('AWS::IAM::Policy');
     const ingest = Object.entries(policies).find(([id]) => id.startsWith('IngestFunction'));
     expect(ingest).toBeDefined();
@@ -154,10 +164,12 @@ describe('IAM', () => {
     const actions = statements.flatMap((s) => asArray<string>(s.Action)).sort();
     expect(actions).toEqual([
       'bedrock:IngestKnowledgeBaseDocuments',
+      'bedrock:StartIngestionJob',
       'dynamodb:GetItem',
       'dynamodb:UpdateItem',
       'logs:CreateLogStream',
       'logs:PutLogEvents',
+      's3:PutObject',
     ]);
     // Logs are limited to the function's own log group, not `log-group:*`.
     const logs = statements.find((s) => asArray<string>(s.Action).includes('logs:PutLogEvents'));

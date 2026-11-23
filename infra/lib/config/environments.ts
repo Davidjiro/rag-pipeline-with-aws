@@ -61,7 +61,7 @@ export interface EnvironmentConfig {
   readonly protectedEnvironment: boolean;
   readonly logRetention: logs.RetentionDays;
 
-  /** Inference profile of the chat model, for example `global.anthropic.claude-haiku-4-5-20251001-v1:0`. */
+  /** Inference profile of the chat model, for example `global.amazon.nova-2-lite-v1:0`. */
   readonly modelProfileId: string;
   /** Embedding model used by the Knowledge Base. */
   readonly embeddingModelId: string;
@@ -126,7 +126,8 @@ function build(name: EnvName, prod: boolean): EnvironmentConfig {
     protectedEnvironment: prod,
     logRetention: prod ? logs.RetentionDays.ONE_MONTH : logs.RetentionDays.ONE_WEEK,
     // `global.` profiles are priced about 10% below the US-only profile, see ARCHITECTURE.md section 11.
-    modelProfileId: process.env.KC_MODEL_PROFILE_ID ?? 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    // Amazon Nova 2 Lite: needs no per-account use-case form (Anthropic models do), so a fresh account deploys with no manual step.
+    modelProfileId: process.env.KC_MODEL_PROFILE_ID ?? 'global.amazon.nova-2-lite-v1:0',
     embeddingModelId: 'amazon.titan-embed-text-v2:0',
     embeddingDimensions: 512,
     chunkMaxTokens: 300,
@@ -168,7 +169,7 @@ export function agentName(env: EnvironmentConfig, suffix: string): string {
 }
 
 /**
- * The model id behind an inference profile id: `global.anthropic.claude-...` becomes `anthropic.claude-...`.
+ * The model id behind an inference profile id: `global.amazon.nova-2-lite-v1:0` becomes `amazon.nova-2-lite-v1:0`.
  * Only global profiles are supported, because the IAM policy for them has a specific three-part shape
  * (see constructs/chat-agent-runtime.ts).
  */

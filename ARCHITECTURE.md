@@ -13,8 +13,8 @@ Under normal use the cost is dominated by model tokens (section 11).
 |-------|-------|--------|
 | 1 | Architecture (this document) | done |
 | 2 | **CDK infrastructure** (`infra/`), with placeholder application code so every image and asset builds | **done and verified**: format, types, unit tests, cdk-nag, cfn-lint, AWS template validation, local arm64 container checks. Deployed once to a development account, smoke-tested, then destroyed |
-| 3 | **Backend** (`backend/`): FastAPI routes and the ingest Lambda | **done and verified**: 126 tests (auth, tenancy, uploads, indexing state, streaming, deletion, ingest) with simulated AWS, lint, arm64 image import check. Not yet exercised against real AWS |
-| 4 | **Agent** (`agent/`): Strands agent, search tool, streaming and citations | **done and verified**: 47 tests (the real Strands loop with a scripted model), lint, arm64 container started and answered `/ping` and `/invocations`. Not yet run against real Bedrock |
+| 3 | **Backend** (`backend/`): FastAPI routes and the ingest Lambda | **done and verified**: 138 tests (auth, tenancy, uploads, indexing state, streaming, deletion, ingest) with simulated AWS, lint, arm64 image import check. Not yet exercised against real AWS |
+| 4 | **Agent** (`agent/`): boto3 tool loop, search tool, streaming and citations | **done and verified locally**: 69 tests (the loop against scripted Bedrock streams in the real event format), lint, arm64 container answered `/ping` and `/invocations`, and the loop answered correctly against real Nova 2 Lite with a fake search. Full deployment test pending |
 | 5 | Web UI: React app | planned |
 
 ### Findings during implementation (all reflected in this document)
@@ -23,6 +23,10 @@ Under normal use the cost is dominated by model tokens (section 11).
 - The `ingest` Lambda uses Python 3.15: it satisfies the cdk-nag runtime rule, and AWS's CloudFormation schema lists it.
 - With the default `*.cloudfront.net` certificate, CloudFront fixes TLS 1.0 as the minimum viewer version. Only a custom domain fixes that.
 - AgentCore and Lambda helpers create log groups outside CloudFormation, which `cdk destroy` leaves behind. `scripts/teardown.sh` removes them.
+- On the first real deployment: `IngestKnowledgeBaseDocuments` and `DeleteKnowledgeBaseDocuments` are authorised as `bedrock:StartIngestionJob` too, so both roles need it.
+- A Knowledge Base with an S3 data source rejects inline metadata. Metadata is written as a `<file>.metadata.json` object next to each document.
+- Anthropic models refuse every call until a one-time per-account use-case form is submitted, even when the model shows as `ACTIVE`. The default model is therefore Amazon Nova 2 Lite, which needs no form. `preflight.sh` checks the form when an Anthropic model is chosen.
+- Nova may wrap reasoning in `<thinking>` tags around tool calls. The agent removes them from the streamed answer.
 
 ---
 
@@ -40,7 +44,7 @@ Under normal use the cost is dominated by model tokens (section 11).
 | **Single-table DynamoDB** | fewer resources to manage, same on-demand billing | one table |
 | **Only `dev` is deployed** | `prod` stays as configuration in code | no duplicate resources |
 | **512-dimension embeddings** | AWS reports 512-dimension Titan v2 vectors keep about 99% of the accuracy of 1024 | half the vector storage and query work |
-| **`global.` model profile** | the global Haiku 4.5 list price is about 10% below the US-only profile | check data-residency needs (R9) |
+| **`global.` model profile** | the global Nova 2 Lite list price is about 10% below the US-only profile | check data-residency needs (R9) |
 | **Cost controls** | bound the worst case | per-user daily cap, upload limits, optional concurrency caps, budget alert, short agent idle timeout |
 
 ---
@@ -56,7 +60,7 @@ Under normal use the cost is dominated by model tokens (section 11).
 | Parsing, chunking, summarising | parsing library and custom code | **Bedrock Knowledge Base** ingestion (parser and chunking are configuration) |
 | Embeddings and vector store | external embedding API, Postgres with pgvector | **Titan Text Embeddings v2** in **S3 Vectors** |
 | Retrieval | custom SQL: vector, keyword, weighted fusion, multi-query | **`Retrieve`** with a metadata filter. Multi-query and fusion run in the agent. No hybrid |
-| LLM and agent | an agent framework inside the API process | **AgentCore Runtime** (Strands agent) + Claude Haiku 4.5 on Bedrock |
+| LLM and agent | an agent framework inside the API process | **AgentCore Runtime** (a boto3 tool loop over the Converse API) + Amazon Nova 2 Lite on Bedrock |
 | Safety | often none | **Bedrock Guardrails** (prompt-attack check) |
 | Agent memory | custom tables | DynamoDB chat history, sent to the agent with each question |
 
@@ -77,7 +81,7 @@ are not offered: they are properties of the shared Knowledge Base or of hybrid s
 | D4 | UI hosting | **S3 + CloudFront**, built as a single-page app |
 | D5 | Backend and front door | **FastAPI on Lambda** (Lambda Web Adapter), response streaming over a **Function URL**, reached through CloudFront at `/api/*`. No API Gateway |
 | D6 | Chat history | **DynamoDB only.** The API sends the last few messages to the agent. No AgentCore Memory in v1 |
-| D7 | Agent | **AgentCore Runtime** (Strands). One tool: search the Knowledge Base. No Gateway, no Memory in v1 |
+| D7 | Agent | **AgentCore Runtime**, no agent framework: a short boto3 loop over the Bedrock Converse API, so every event and failure path is visible and tested. One tool: search the Knowledge Base. No Gateway, no Memory in v1 |
 | D8 | URL ingestion | Out of v1 |
 | D9 | Retrieval strategies | `basic` (default) and `multi-query` (opt-in per project). **Hybrid and multi-query hybrid are out of scope** |
 
@@ -184,7 +188,7 @@ There is no VPC, no NAT gateway and no VPC endpoint, because nothing here needs 
 | 4 | The API returns a presigned POST. Its conditions fix the file type, maximum size and the exact S3 key. |
 | 5 | The browser uploads the file directly to S3. |
 | 6 | S3 calls the Ingest Lambda directly with an `ObjectCreated` event. There is no workflow in between. |
-| 7-8 | The Ingest Lambda sets the status to `INGESTING` and calls `IngestKnowledgeBaseDocuments` with the S3 location and inline metadata (`project_id`, `owner_id`, `doc_id`, `filename`). If that call fails, it records `FAILED` with the reason. Then it exits. It does not wait. |
+| 7-8 | The Ingest Lambda sets the status to `INGESTING` and writes the metadata (`project_id`, `owner_id`, `doc_id`, `filename`) as `<file>.metadata.json` next to the file, then calls `IngestKnowledgeBaseDocuments` with both S3 locations. (A Knowledge Base with an S3 data source rejects inline metadata. The ingest function ignores the event its own metadata write causes, and the API refuses uploads with that suffix.) If that call fails, it records `FAILED` with the reason. Then it exits. It does not wait. |
 | 9-12 | When the UI lists files, the API Lambda asks the Knowledge Base about documents still `INGESTING` (`GetKnowledgeBaseDocuments`) and saves `READY` or `FAILED`. A document stuck for more than 30 minutes becomes `FAILED (timed out)`. |
 
 **Status shown in the UI:** `PENDING_UPLOAD` → `INGESTING` → `READY` or `FAILED`.
@@ -433,7 +437,7 @@ Nothing bills by the hour. Idle cost is a few cents (S3 storage and vectors). Wh
 
 | Lever | Value | Why |
 |-------|-------|-----|
-| Chat model | Claude Haiku 4.5, `global.` profile | cheapest capable model. Larger Claude models cost about three times as much per token |
+| Chat model | Amazon Nova 2 Lite, `global.` profile | low price per token, supports tool use, and needs no per-account use-case form (Anthropic models do), so a new account deploys with no manual step. Any `global.` profile can be set with `KC_MODEL_PROFILE_ID` |
 | Embedding dimensions | 512 | half the vector size of 1024 |
 | Chunk size | about 300 tokens, top 5 chunks | bounds the tokens sent to the model |
 | History sent to the agent | last 6 messages | tokens grow with history |
@@ -455,22 +459,23 @@ Per 1,000 questions, `basic` strategy. **These are estimates built from the assu
 
 | Item | Assumption | About |
 |------|------------|-------|
-| Model tokens | 2 model calls per question, about 3,900 input and 410 output tokens in total. Haiku 4.5 at $1 per million input and $5 per million output tokens | $5.95 |
+| Model tokens | 2 model calls per question, about 3,900 input and 410 output tokens in total. Nova 2 Lite at $0.30 per million input and $2.50 per million output tokens | $2.20 |
 | Guardrail | about 2 text units per question at $0.15 per 1,000 text units (a text unit is up to 1,000 characters) | $0.30 |
 | AgentCore Runtime | about 250 chat sessions, 1 GB held about 7 minutes each, at $0.00945 per GB-hour, plus a little CPU | $0.30 to $0.50 |
 | API Lambda | about 25 s at 0.5 GB per question | about $0.21, usually inside the free tier |
 | S3 Vectors queries | $2.50 per million queries plus processing | under $0.01 |
 | DynamoDB, S3, CloudFront, Cognito, logs | free tiers or cents | under $0.50 |
-| **Total** | | **about $7 to $8 per 1,000 questions** |
+| **Total** | | **about $3 to $4 per 1,000 questions** |
 
 Other numbers:
-- `multi-query` adds about $1.35 per 1,000 questions (one extra short model call), plus more retrievals that cost almost nothing.
+- `multi-query` adds about $0.50 per 1,000 questions (one extra short model call), plus more retrievals that cost almost nothing.
+- With Claude Haiku 4.5 instead ($1 and $5 per million tokens) model tokens are about $5.95, for a total of about $7 to $8.
 - Ingestion is a one-time cost of about $0.02 per million tokens (Titan v2). 100 MB of text is roughly 25 million tokens, so about $0.50.
 - Vector storage for that corpus is about 0.3 GB at $0.06 per GB-month: cents.
 - With no questions at all the bill is a few cents a month.
 
 Sources, as quoted: Bedrock pricing page (Guardrails per text unit); AWS Builder Center article on AgentCore Runtime billing (v1 rates);
-a third-party article quoting AWS examples for S3 Vectors; public price trackers for Haiku 4.5 ($1 and $5, global profile; the US-only profile is listed about 10% higher);
+a third-party article quoting AWS examples for S3 Vectors; public price trackers for Nova 2 Lite ($0.30 and $2.50, global profile; the US-only profile is listed about 10% higher) and Haiku 4.5 ($1 and $5);
 the AWS Titan v2 launch post (price, and 512 dimensions keeping about 99% of accuracy). **Confirm on the AWS pricing pages and the Pricing Calculator before relying on any figure.**
 
 ### 11.4 What would make the bill jump

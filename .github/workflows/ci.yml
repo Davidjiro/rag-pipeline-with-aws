@@ -26,10 +26,12 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci --prefix infra
-          pip install cfn-lint -r backend/api/requirements.txt -r backend/requirements-dev.txt
-      - name: Create the agent environment (its dependencies are separate from the backend's)
+          pip install cfn-lint
+          python -m venv backend/.venv
+          backend/.venv/bin/pip install -r backend/api/requirements.txt -r backend/requirements-dev.txt
+      - name: Create the agent environment (separate from the backend, because both have a package named app)
         run: |
-          python -m venv /tmp/agent-venv
-          /tmp/agent-venv/bin/pip install -r agent/requirements.txt -r agent/requirements-dev.txt
+          python -m venv agent/.venv
+          agent/.venv/bin/pip install -r agent/requirements.txt -r agent/requirements-dev.txt
       - name: Verify (format, types, tests, synth with cdk-nag, cfn-lint, backend and agent lint and tests)
-        run: AGENT_PYTHON=/tmp/agent-venv/bin/python bash scripts/verify.sh
+        run: bash scripts/verify.sh

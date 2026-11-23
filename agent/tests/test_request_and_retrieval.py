@@ -141,7 +141,7 @@ def test_evidence_numbers_documents_and_keeps_best_snippet():
     )
     assert [n for n, _ in numbered] == [1, 2, 1]
     cites = evidence.citations()
-    assert [c["source"] for c in cites] == ["s3://b/a.pdf", "s3://b/b.pdf"]
+    assert [(c["number"], c["source"]) for c in cites] == [(1, "s3://b/a.pdf"), (2, "s3://b/b.pdf")]
     assert cites[0]["snippet"] == "strong" and cites[0]["score"] == 0.9
 
 

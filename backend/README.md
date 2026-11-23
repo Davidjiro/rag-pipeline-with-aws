@@ -11,14 +11,14 @@ Design: `../ARCHITECTURE.md` sections 4 to 9.
 ## Run the checks
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r api/requirements.txt -r requirements-dev.txt
-ruff check . && ruff format --check . && pytest
+python3 -m venv .venv
+.venv/bin/pip install -r api/requirements.txt -r requirements-dev.txt     # includes boto3
+.venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/python -m pytest
 ```
 
 The tests use no real AWS. DynamoDB and S3 are simulated by `moto`. Bedrock and AgentCore are replaced by small fakes that record every call,
 so the tests can assert the exact retrieval filter, agent payload and index requests. `scripts/verify.sh` runs these checks as layer 8
-(set `BACKEND_PYTHON` to the venv's python).
+(it uses `backend/.venv` when it exists).
 
 | File | Purpose |
 |------|---------|

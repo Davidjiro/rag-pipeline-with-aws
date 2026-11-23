@@ -127,7 +127,13 @@ export class ApiFunction extends Construct {
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'KnowledgeBase',
-        actions: ['bedrock:Retrieve', 'bedrock:GetKnowledgeBaseDocuments', 'bedrock:DeleteKnowledgeBaseDocuments'],
+        actions: [
+          'bedrock:Retrieve',
+          'bedrock:GetKnowledgeBaseDocuments',
+          'bedrock:DeleteKnowledgeBaseDocuments',
+          // Found by deploying: DeleteKnowledgeBaseDocuments is authorised as bedrock:StartIngestionJob too.
+          'bedrock:StartIngestionJob',
+        ],
         resources: [props.knowledgeBaseArn],
       }),
     );

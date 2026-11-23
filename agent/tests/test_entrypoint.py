@@ -1,15 +1,16 @@
 """The AgentCore HTTP contract end to end, through the SDK's server: /ping, /invocations, SSE framing, error handling."""
 
 import json
+from functools import partial
 
 import pytest
-from conftest import FakeRetrieveClient, FakeRuntimeClient, ScriptedModel, result
+from conftest import FakeRetrieveClient, FakeRuntimeClient, result
 from starlette.testclient import TestClient
 
 from app import chat, main
 from app.guardrail import InputGuardrail
 from app.retrieval import Searcher
-from app.runner import stream_text
+from app.runner import stream_answer
 
 DOC = "s3://docs/projects/p-1/11111111-1111-1111-1111-111111111111/policy.pdf"
 PAYLOAD = {"user_id": "u-1", "project_id": "p-1", "chat_id": "c-1", "text": "Refund time?", "history": [], "strategy": "basic"}
@@ -22,11 +23,11 @@ def sse_events(response) -> list[dict]:
 @pytest.fixture
 def client(monkeypatch, settings):
     def fake_deps(request):
-        model = ScriptedModel([[("tool", "search_documents", {"query": "refund"})], [("text", "30 days [1].")]])
+        runtime = FakeRuntimeClient(turns=[[("tool", "search_documents", {"query": "refund"})], [("text", "30 days [1].")]])
         searcher = Searcher(
             FakeRetrieveClient(default=[result(DOC, "30 days", 0.7)]), settings, request.project_id, request.user_id
         )
-        return chat.ChatDeps(InputGuardrail(FakeRuntimeClient(), "gr", "1"), searcher, model, stream_text)
+        return chat.ChatDeps(InputGuardrail(runtime, "gr", "1"), searcher, partial(stream_answer, runtime, "m", 256))
 
     monkeypatch.setattr(main, "build_deps", fake_deps)
     return TestClient(main.app)
@@ -77,7 +78,8 @@ def test_events_parse_with_the_api_client(client):
             return {"contentType": "text/event-stream", "response": Body(client.post("/invocations", json=PAYLOAD).text)}
 
     events = list(AgentClient(Runtime(), "arn").stream(PAYLOAD, "s" * 36))
-    assert [e["type"] for e in events] == ["token", "citations"]
+    types = [e["type"] for e in events]
+    assert types[-1] == "citations" and set(types[:-1]) == {"token"} and len(types) >= 2
 
 
 @pytest.mark.parametrize("payload", [{"text": "hi"}, {**PAYLOAD, "strategy": "hybrid"}, {**PAYLOAD, "user_id": ""}])

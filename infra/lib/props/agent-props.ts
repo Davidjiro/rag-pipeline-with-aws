@@ -17,9 +17,9 @@ export interface ChatAgentRuntimeProps {
   /** Folder with the Dockerfile. CDK builds it for linux/arm64 and pushes it to ECR. */
   readonly sourceDir: string;
 
-  /** Inference profile id the agent calls, for example `global.anthropic.claude-haiku-4-5-20251001-v1:0`. */
+  /** Inference profile id the agent calls, for example `global.amazon.nova-2-lite-v1:0`. */
   readonly modelProfileId: string;
-  /** The model behind the profile, for example `anthropic.claude-haiku-4-5-20251001-v1:0`. */
+  /** The model behind the profile, for example `amazon.nova-2-lite-v1:0`. */
   readonly baseModelId: string;
 
   readonly knowledgeBaseId: string;

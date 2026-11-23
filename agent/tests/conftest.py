@@ -1,13 +1,14 @@
-"""Fakes shared by the agent tests. Nothing here calls AWS."""
+"""Fakes shared by the agent tests. Nothing here calls AWS.
+
+`FakeRuntimeClient` plays back scripted ConverseStream turns in the event shape Bedrock sends (checked against a real Nova call:
+text arrives as contentBlockDelta without a contentBlockStart; a tool request has a contentBlockStart with `toolUse`).
+"""
 
 import json
-from collections.abc import AsyncIterator
 
 import pytest
-from strands.models import Model
 
 from app.config import Settings
-from app.guardrail import InputGuardrail
 
 
 @pytest.fixture
@@ -45,15 +46,50 @@ class FakeRetrieveClient:
         return {"retrievalResults": self.responses.get(query, self.default)}
 
 
-class FakeRuntimeClient:
-    """bedrock-runtime: apply_guardrail and converse."""
+def turn_events(turn) -> list[dict]:
+    """Bedrock stream events for one scripted turn: items are ("text", str), ("tool", name, input) or ("raw", event)."""
+    events: list[dict] = [{"messageStart": {"role": "assistant"}}]
+    stop = "end_turn"
+    for index, item in enumerate(turn):
+        if item[0] == "text":
+            for piece in (item[1][: len(item[1]) // 2], item[1][len(item[1]) // 2 :]):  # split, as the real stream does
+                if piece:
+                    events.append({"contentBlockDelta": {"delta": {"text": piece}, "contentBlockIndex": index}})
+            events.append({"contentBlockStop": {"contentBlockIndex": index}})
+        elif item[0] == "tool":
+            stop = "tool_use"
+            raw = item[2] if isinstance(item[2], str) else json.dumps(item[2])
+            events.append(
+                {
+                    "contentBlockStart": {
+                        "start": {"toolUse": {"toolUseId": f"t{index}", "name": item[1]}},
+                        "contentBlockIndex": index,
+                    }
+                }
+            )
+            events.append({"contentBlockDelta": {"delta": {"toolUse": {"input": raw}}, "contentBlockIndex": index}})
+            events.append({"contentBlockStop": {"contentBlockIndex": index}})
+        elif item[0] == "stop":
+            stop = item[1]
+        else:
+            events.append(item[1])
+    events.append({"messageStop": {"stopReason": stop}})
+    events.append({"metadata": {"usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2}}})
+    return events
 
-    def __init__(self, intervene=False, rewrite_text='["alt one", "alt two"]', error=None):
+
+class FakeRuntimeClient:
+    """bedrock-runtime: apply_guardrail, converse (multi-query rewrite) and converse_stream (the answer loop)."""
+
+    def __init__(self, turns=None, intervene=False, rewrite_text='["alt one", "alt two"]', error=None, stream_error=None):
+        self.turns = list(turns or [])
         self.intervene = intervene
         self.rewrite_text = rewrite_text
         self.error = error
+        self.stream_error = stream_error
         self.guardrail_calls: list[dict] = []
         self.converse_calls: list[dict] = []
+        self.stream_calls: list[dict] = []
 
     def apply_guardrail(self, **kwargs):
         self.guardrail_calls.append(kwargs)
@@ -67,51 +103,9 @@ class FakeRuntimeClient:
             raise self.error
         return {"output": {"message": {"content": [{"text": self.rewrite_text}]}}}
 
-
-@pytest.fixture
-def guardrail():
-    return InputGuardrail(FakeRuntimeClient(), "gr1", "1")
-
-
-class ScriptedModel(Model):
-    """A Strands model that plays back scripted turns, so the real Agent loop and tool calling run without Bedrock.
-
-    Each turn is a list of ("text", str) or ("tool", name, input_dict) items.
-    """
-
-    def __init__(self, turns):
-        self.turns = list(turns)
-        self.requests: list[list] = []
-
-    def update_config(self, **model_config):
-        return None
-
-    def get_config(self):
-        return {"model_id": "scripted"}
-
-    async def structured_output(self, output_model, prompt, system_prompt=None, **kwargs):
-        raise NotImplementedError
-        yield
-
-    async def stream(self, messages, tool_specs=None, system_prompt=None, **kwargs) -> AsyncIterator[dict]:
-        self.requests.append(messages)
-        turn = self.turns.pop(0)
-        yield {"messageStart": {"role": "assistant"}}
-        stop = "end_turn"
-        for index, item in enumerate(turn):
-            if item[0] == "text":
-                yield {"contentBlockStart": {"start": {}, "contentBlockIndex": index}}
-                yield {"contentBlockDelta": {"delta": {"text": item[1]}, "contentBlockIndex": index}}
-                yield {"contentBlockStop": {"contentBlockIndex": index}}
-            else:
-                stop = "tool_use"
-                yield {
-                    "contentBlockStart": {
-                        "start": {"toolUse": {"toolUseId": f"tool-{index}", "name": item[1]}},
-                        "contentBlockIndex": index,
-                    }
-                }
-                yield {"contentBlockDelta": {"delta": {"toolUse": {"input": json.dumps(item[2])}}, "contentBlockIndex": index}}
-                yield {"contentBlockStop": {"contentBlockIndex": index}}
-        yield {"messageStop": {"stopReason": stop}}
-        yield {"metadata": {"usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2}, "metrics": {"latencyMs": 1}}}
+    def converse_stream(self, **kwargs):
+        # copy the messages: the loop keeps appending to the same list
+        self.stream_calls.append({**kwargs, "messages": json.loads(json.dumps(kwargs["messages"]))})
+        if self.stream_error:
+            raise self.stream_error
+        return {"stream": iter(turn_events(self.turns.pop(0)))}

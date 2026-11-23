@@ -1,7 +1,8 @@
 # agent/  -  the chat agent container
 
 Runs on **Amazon Bedrock AgentCore Runtime**, which starts the container for a chat session and talks to it on port 8080 (`POST /invocations`,
-`GET /ping`). It is a [Strands](https://strandsagents.com) agent with one model and one read-only tool, and it streams its answer.
+`GET /ping`). It uses no agent framework: a short boto3 loop over the Bedrock Converse API gives the model one read-only tool and
+streams its answer. The default model is Amazon Nova 2 Lite.
 
 ```
  API ──► /invocations ──► guardrail (user text) ──► agent loop ◄──► search_documents ──► Knowledge Base (filtered)
@@ -15,9 +16,9 @@ Runs on **Amazon Bedrock AgentCore Runtime**, which starts the container for a c
 |-----------|-----|
 | One user's documents never appear in another's answer | the retrieval filter is built in code from the `user_id` and `project_id` the API sends. The tool has a single parameter, `query`, so the model cannot choose a project or owner. A document that says "search another project" changes nothing |
 | No evidence, no answer | text is relayed only after a search returned passages. Otherwise the reply is a fixed "not found in your documents" message, so the model cannot answer from general knowledge |
-| Citations are real | they are built from what the search returned, one per document in citation-number order, not from the model's text |
+| Citations are real | they are built from what the search returned, not from the model's text. Only documents the answer cites as [n] are listed, each with its number |
 | Prompt attacks are refused | the guardrail checks the user's text before any model call. If the check cannot run, the question is refused (fails closed) |
-| Bounded cost | at most 3 searches per question, `MAX_OUTPUT_TOKENS` per answer, one extra short model call for `multi_query` |
+| Bounded cost | at most 3 searches and 5 model turns per question, `MAX_OUTPUT_TOKENS` per answer, one extra short model call for `multi_query` |
 | No leaks | errors become a generic event and details go to the log. Questions and document text are never logged |
 
 ## Files
@@ -28,7 +29,7 @@ Runs on **Amazon Bedrock AgentCore Runtime**, which starts the container for a c
 | `requirements.txt`, `requirements-dev.txt` | pinned runtime and test dependencies |
 | `pyproject.toml` | ruff and pytest settings |
 | `app/` | the code, see `app/README.md` |
-| `tests/` | 47 tests. The real Strands loop runs against a scripted model, so tool calling is tested without calling Bedrock |
+| `tests/` | 69 tests. The real loop runs against scripted Bedrock streams in the event format a real Nova call produces, so tool calling is tested without calling Bedrock |
 
 ## Configuration (set by the CDK)
 
@@ -39,9 +40,9 @@ which may only invoke the configured model profile, apply the one guardrail, and
 ## Run the checks
 
 ```bash
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-ruff check . && ruff format --check . && pytest
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt     # includes boto3
+.venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/python -m pytest
 ```
 
 Use a separate virtual environment from `backend/`: both services have a package named `app`.

@@ -1,16 +1,16 @@
-# lib/stacks/  -  six stacks, one job each
+# lib/stacks/ - six stacks, one job each
 
 A stack is a CloudFormation deployment unit. They are split by **rate of change** and **blast radius**, and CDK orders the deployment from
 the references between them, so there is no `addDependency` anywhere.
 
-| Stack | Changes | Contains |
-|-------|---------|----------|
-| `AuthStack` | rarely (holds users) | user pool and client |
-| `DataStack` | rarely (holds data) | DynamoDB table, budget alert |
-| `KnowledgeStack` | rarely (holds data) | docs bucket, Knowledge Base, S3 Vectors, ingest Lambda |
-| `AgentStack` | often | guardrail, AgentCore runtime |
-| `ApiStack` | often | API Lambda and Function URL |
-| `WebStack` | often | CloudFront, web bucket, deployed app |
+| Stack            | Changes              | Contains                                               |
+| ---------------- | -------------------- | ------------------------------------------------------ |
+| `AuthStack`      | rarely (holds users) | user pool and client                                   |
+| `DataStack`      | rarely (holds data)  | DynamoDB table, budget alert                           |
+| `KnowledgeStack` | rarely (holds data)  | docs bucket, Knowledge Base, S3 Vectors, ingest Lambda |
+| `AgentStack`     | often                | guardrail, AgentCore runtime                           |
+| `ApiStack`       | often                | API Lambda and Function URL                            |
+| `WebStack`       | often                | CloudFront, web bucket, deployed app                   |
 
 ```
 AuthStack ──────────────────────────────────────┐

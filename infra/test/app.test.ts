@@ -71,13 +71,15 @@ describe('naming', () => {
 
 describe('model profile', () => {
   test('global profiles resolve to their base model id', () => {
+    expect(baseModelId('global.amazon.nova-2-lite-v1:0')).toBe('amazon.nova-2-lite-v1:0');
+    // other global profiles keep working when chosen with KC_MODEL_PROFILE_ID
     expect(baseModelId('global.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe(
       'anthropic.claude-haiku-4-5-20251001-v1:0',
     );
   });
 
   test('a regional profile is rejected with an explanation (its IAM policy has a different shape)', () => {
-    expect(() => baseModelId('us.anthropic.claude-haiku-4-5-20251001-v1:0')).toThrow(/global inference profile/);
+    expect(() => baseModelId('us.amazon.nova-2-lite-v1:0')).toThrow(/global inference profile/);
   });
 });
 

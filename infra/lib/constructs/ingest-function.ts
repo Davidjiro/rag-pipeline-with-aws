@@ -4,8 +4,8 @@
  * WHAT IT DOES
  *   When a file lands in the documents bucket, S3 calls this function directly with an `ObjectCreated` event. The function
  *   looks the document up in DynamoDB (the record was created by the API before the upload), marks it `INGESTING`, and calls
- *   `IngestKnowledgeBaseDocuments` with the file's S3 location and inline metadata (`project_id`, `owner_id`, `doc_id`,
- *   `filename`). Then it exits. It does NOT wait for indexing: the API checks the status later, when the UI asks for it.
+ *   `IngestKnowledgeBaseDocuments` with the file's S3 location and its metadata (`project_id`, `owner_id`, `doc_id`,
+ *   `filename`), which it first writes as `<file>.metadata.json` next to the file. Then it exits. It does NOT wait for indexing: the API checks the status later, when the UI asks for it.
  *
  * WHY THERE IS NO WORKFLOW
  *   An earlier design used EventBridge and a Step Functions polling loop. It was removed: an S3 trigger plus a lazy status
@@ -21,8 +21,8 @@
  *   and retries, so nothing is lost. Leave it unset on accounts with a low Lambda quota (see config/environments.ts).
  *
  * LEAST PRIVILEGE
- *   The role may only call `IngestKnowledgeBaseDocuments` on this Knowledge Base and `GetItem` / `UpdateItem` on the table.
- *   It cannot read the file: the Knowledge Base's own role does that.
+ *   The role may only call `IngestKnowledgeBaseDocuments` (authorised as `StartIngestionJob` too) on this Knowledge Base,
+ *   `GetItem` / `UpdateItem` on the table, and write `*.metadata.json` objects. It cannot read or replace a document.
  *
  * TRAPS
  *   - S3 event notifications are delivered at least once. The handler must be safe to run twice for the same file.
@@ -76,11 +76,21 @@ export class IngestFunction extends Construct {
     this.function.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'IngestIntoThisKnowledgeBase',
-        actions: ['bedrock:IngestKnowledgeBaseDocuments'],
+        // Found by deploying: IngestKnowledgeBaseDocuments is authorised as bedrock:StartIngestionJob, so both are needed.
+        actions: ['bedrock:IngestKnowledgeBaseDocuments', 'bedrock:StartIngestionJob'],
         resources: [props.knowledgeBaseArn],
       }),
     );
     props.table.grant(this.function, 'dynamodb:GetItem', 'dynamodb:UpdateItem');
+    // Each document's metadata travels as `<file>.metadata.json` next to it: a Knowledge Base with an S3 data source rejects
+    // inline metadata (found by deploying). The role may write those objects only. It cannot read or replace a document.
+    this.function.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'WriteDocumentMetadata',
+        actions: ['s3:PutObject'],
+        resources: [props.bucket.arnForObjects(`${props.prefix}*.metadata.json`)],
+      }),
+    );
 
     // The trigger. The prefix keeps unrelated writes from invoking the function.
     props.bucket.addEventNotification(s3.EventType.OBJECT_CREATED, new s3n.LambdaDestination(this.function), {

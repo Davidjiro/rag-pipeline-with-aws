@@ -56,7 +56,7 @@ npx cdk destroy "kc-dev-*"               # remove dev
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `CDK_DEFAULT_ACCOUNT`, `CDK_DEFAULT_REGION` | from your credentials, `us-east-1` | target account and region |
-| `KC_MODEL_PROFILE_ID` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | chat model. Must be a `global.` inference profile |
+| `KC_MODEL_PROFILE_ID` | `global.amazon.nova-2-lite-v1:0` | chat model. Must be a `global.` inference profile. Anthropic models also need the one-time Anthropic use-case form for the account |
 | `KC_BUDGET_EMAIL` | none | e-mail for the spend alert. Without it no budget is created |
 | `KC_BUDGET_USD` | `10` | monthly budget threshold |
 | `KC_UPLOAD_ORIGIN` | `https://*.cloudfront.net` | browser origin allowed to upload to S3. Set your exact origin when you have a custom domain |

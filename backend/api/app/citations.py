@@ -4,7 +4,7 @@ The agent output is not trusted. A citation is kept only if its `source` is an o
 Anything else (another bucket, another project, a malformed value) is dropped, so a confused or manipulated agent cannot make
 the API hand out a download link to a file the user does not own.
 
-Stored form (in DynamoDB):  {"key", "filename", "snippet", "score"}
+Stored form (in DynamoDB):  {"number", "key", "filename", "snippet", "score"}  (`number` is the [n] used in the answer text)
 Returned form:              the stored form plus `url`, a presigned download link valid for 5 minutes.
 """
 
@@ -54,8 +54,11 @@ def sanitize(raw: Any, settings: Settings, project_id: str) -> list[dict]:
         seen.add(key)
         score = item.get("score")
         snippet = item.get("snippet")
+        number = item.get("number")
         clean.append(
             {
+                # the [n] the answer text uses for this source; bool is excluded because it is an int in Python
+                "number": number if isinstance(number, int) and not isinstance(number, bool) and 0 < number < 1000 else None,
                 "key": key,
                 "filename": parsed[2],
                 "snippet": snippet[:SNIPPET_CHARS] if isinstance(snippet, str) else "",

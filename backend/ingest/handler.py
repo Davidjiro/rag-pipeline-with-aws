@@ -6,19 +6,26 @@ For each uploaded object:
     1. read the key and look up the document record the API created when it issued the upload (PK PROJECT#<pid>, SK DOC#<id>)
     2. move the record PENDING_UPLOAD -> INGESTING with ONE conditional write, and remove its expiry (`ttl`) so the record
        survives. If the condition fails the record was already handled (S3 delivers events at least once), and nothing is done.
-    3. call IngestKnowledgeBaseDocuments with inline metadata `project_id`, `owner_id`, `doc_id`, `filename`
-    4. if Bedrock rejects the request, mark the record FAILED so the user sees the problem
+    3. write the document's metadata (`project_id`, `owner_id`, `doc_id`, `filename`) as `<key>.metadata.json` next to it
+    4. call IngestKnowledgeBaseDocuments with the S3 locations of the file and of its metadata
+    5. if Bedrock rejects the request, mark the record FAILED so the user sees the problem
+
+WHY A METADATA FILE
+    A Knowledge Base with an S3 data source rejects metadata sent inline in the ingest request ("You can only upload content
+    and metadata from S3 if your knowledge base is connected to an S3 data source"). Found on the first real deployment.
+    Writing the metadata object triggers this function again; that event is recognised by its suffix and ignored.
 
 SECURITY
-    The owner written into the index metadata comes from the DynamoDB record that the API created for an authenticated user,
-    never from the S3 object or its key. An object with no matching record, or whose file name differs from the record, is
-    ignored. Retrieval later filters on this metadata, so this is what keeps one user's passages away from another.
+    The owner written into the metadata comes from the DynamoDB record that the API created for an authenticated user, never
+    from the S3 object or its key. An object with no matching record, or whose file name differs from the record, is not
+    indexed. Retrieval later filters on this metadata, so this is what keeps one user's passages away from another.
 
 Environment: TABLE_NAME, KNOWLEDGE_BASE_ID, DATA_SOURCE_ID.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import UTC, datetime
@@ -34,8 +41,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # The S3 notification is filtered to this prefix by the infrastructure.
-# Keep in step with the API (keys.py); a contract test checks it.
+# Keep in step with the API (keys.py); a contract test checks both values.
 DOCS_PREFIX = "projects/"
+METADATA_SUFFIX = ".metadata.json"
 
 PENDING_UPLOAD = "PENDING_UPLOAD"
 INGESTING = "INGESTING"
@@ -52,6 +60,11 @@ def _table():
 @lru_cache
 def _bedrock():
     return boto3.client("bedrock-agent", config=_RETRY)
+
+
+@lru_cache
+def _s3():
+    return boto3.client("s3", config=_RETRY)
 
 
 def parse_key(key: str) -> tuple[str, str, str] | None:
@@ -99,11 +112,26 @@ def _mark_failed(doc: dict, reason: str) -> None:
         logger.exception("Could not mark document %s as FAILED", doc.get("doc_id"))
 
 
-def _inline_attribute(key: str, value: str) -> dict:
-    return {"key": key, "value": {"type": "STRING", "stringValue": value}}
+def metadata_document(doc: dict) -> dict:
+    """The Knowledge Base metadata file format: string attributes the retrieval filter matches on."""
+    return {
+        "metadataAttributes": {
+            "project_id": doc["project_id"],
+            "owner_id": doc["owner_id"],
+            "doc_id": doc["doc_id"],
+            "filename": doc["filename"],
+        }
+    }
 
 
 def _ingest(doc: dict, bucket: str, key: str) -> None:
+    metadata_key = key + METADATA_SUFFIX
+    _s3().put_object(
+        Bucket=bucket,
+        Key=metadata_key,
+        Body=json.dumps(metadata_document(doc)).encode("utf-8"),
+        ContentType="application/json",
+    )
     response = _bedrock().ingest_knowledge_base_documents(
         knowledgeBaseId=os.environ["KNOWLEDGE_BASE_ID"],
         dataSourceId=os.environ["DATA_SOURCE_ID"],
@@ -111,15 +139,7 @@ def _ingest(doc: dict, bucket: str, key: str) -> None:
         documents=[
             {
                 "content": {"dataSourceType": "S3", "s3": {"s3Location": {"uri": f"s3://{bucket}/{key}"}}},
-                "metadata": {
-                    "type": "IN_LINE_ATTRIBUTE",
-                    "inlineAttributes": [
-                        _inline_attribute("project_id", doc["project_id"]),
-                        _inline_attribute("owner_id", doc["owner_id"]),
-                        _inline_attribute("doc_id", doc["doc_id"]),
-                        _inline_attribute("filename", doc["filename"]),
-                    ],
-                },
+                "metadata": {"type": "S3_LOCATION", "s3Location": {"uri": f"s3://{bucket}/{metadata_key}"}},
             }
         ],
     )
@@ -130,6 +150,8 @@ def _ingest(doc: dict, bucket: str, key: str) -> None:
 
 def _process(bucket: str, raw_key: str) -> str:
     key = unquote_plus(raw_key)
+    if key.endswith(METADATA_SUFFIX):
+        return "metadata"  # the object this function wrote for a document: nothing to index
     parsed = parse_key(key)
     if parsed is None:
         logger.warning("Ignoring object with unexpected key shape")

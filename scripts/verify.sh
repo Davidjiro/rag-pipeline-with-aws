@@ -12,7 +12,7 @@
 #   6 AWS check   `aws cloudformation validate-template` (read-only), when credentials exist
 #   7 python      the application sources compile
 #   8 backend     ruff lint + format check, pytest (API, ingest, contracts) with fakes for AWS
-#   9 agent       ruff lint + format check, pytest (real Strands loop with a scripted model; no model calls)
+#   9 agent       ruff lint + format check, pytest (the boto3 agent loop with a scripted Bedrock stream; no model calls)
 #
 # A layer that cannot run (for example cfn-lint is not installed) is reported as SKIPPED, never as passed.
 
@@ -60,28 +60,32 @@ if command -v aws >/dev/null 2>&1 && aws sts get-caller-identity >/dev/null 2>&1
 else skip "6 AWS validate-template" "no AWS credentials"; fi
 
 pycheck() { python3 -m py_compile "$ROOT"/backend/api/app/*.py "$ROOT"/backend/api/app/routes/*.py "$ROOT"/backend/ingest/*.py "$ROOT"/agent/app/*.py; local rc=$?
-  find "$ROOT" -name __pycache__ -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; return $rc; }
+  find "$ROOT" -name __pycache__ -not -path '*/node_modules/*' -not -path '*/.venv/*' -exec rm -rf {} + 2>/dev/null; return $rc; }
 run "7 python sources compile" pycheck
 
+# Each Python service has its own virtual environment (both have a package named `app`): <service>/.venv by default,
+# overridable with BACKEND_PYTHON / AGENT_PYTHON. Create them with the commands in backend/README.md and agent/README.md.
+venv_python() { if [ -x "$ROOT/$1/.venv/bin/python" ]; then echo "$ROOT/$1/.venv/bin/python"; else echo python3; fi; }
+BACKEND_PY="${BACKEND_PYTHON:-$(venv_python backend)}"
+AGENT_PY="${AGENT_PYTHON:-$(venv_python agent)}"
+
 backend() {
-  local py="${BACKEND_PYTHON:-python3}" rc=0
+  local py="$BACKEND_PY" rc=0
   (cd "$ROOT/backend" && "$py" -m ruff check . && "$py" -m ruff format --check . && "$py" -m pytest) || rc=1
-  find "$ROOT/backend" -name __pycache__ -o -name .pytest_cache | xargs rm -rf 2>/dev/null
+  find "$ROOT/backend" -path "$ROOT/backend/.venv" -prune -o \( -name __pycache__ -o -name .pytest_cache \) -type d -exec rm -rf {} + 2>/dev/null
   return $rc
 }
-BACKEND_PY="${BACKEND_PYTHON:-python3}"
-if "$BACKEND_PY" -c "import fastapi, moto, pytest" >/dev/null 2>&1 && "$BACKEND_PY" -m ruff --version >/dev/null 2>&1; then
+if "$BACKEND_PY" -c "import boto3, fastapi, moto, pytest" >/dev/null 2>&1 && "$BACKEND_PY" -m ruff --version >/dev/null 2>&1; then
   run "8 backend (ruff, pytest)" backend
 else skip "8 backend" "dependencies missing: pip install -r backend/api/requirements.txt -r backend/requirements-dev.txt"; fi
 
 agent_checks() {
-  local py="${AGENT_PYTHON:-python3}" rc=0
+  local py="$AGENT_PY" rc=0
   (cd "$ROOT/agent" && "$py" -m ruff check . && "$py" -m ruff format --check . && "$py" -m pytest) || rc=1
-  find "$ROOT/agent" -name __pycache__ -o -name .pytest_cache | xargs rm -rf 2>/dev/null
+  find "$ROOT/agent" -path "$ROOT/agent/.venv" -prune -o \( -name __pycache__ -o -name .pytest_cache \) -type d -exec rm -rf {} + 2>/dev/null
   return $rc
 }
-AGENT_PY="${AGENT_PYTHON:-python3}"
-if "$AGENT_PY" -c "import strands, bedrock_agentcore, pytest, pytest_asyncio, httpx" >/dev/null 2>&1 && "$AGENT_PY" -m ruff --version >/dev/null 2>&1; then
+if "$AGENT_PY" -c "import boto3, bedrock_agentcore, pytest, httpx" >/dev/null 2>&1 && "$AGENT_PY" -m ruff --version >/dev/null 2>&1; then
   run "9 agent (ruff, pytest)" agent_checks
 else skip "9 agent" "dependencies missing: pip install -r agent/requirements.txt -r agent/requirements-dev.txt (separate venv from the backend)"; fi
 

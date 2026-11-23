@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import boto3
 import handler
 import pytest
@@ -39,6 +41,7 @@ def env(monkeypatch):
         monkeypatch.setenv(k, v)
     handler._table.cache_clear()
     handler._bedrock.cache_clear()
+    handler._s3.cache_clear()
 
 
 @pytest.fixture
@@ -51,8 +54,10 @@ def table(env):
             KeySchema=[{"AttributeName": "PK", "KeyType": "HASH"}, {"AttributeName": "SK", "KeyType": "RANGE"}],
             BillingMode="PAY_PER_REQUEST",
         )
+        boto3.client("s3").create_bucket(Bucket="docs")
         yield resource.Table("t")
     handler._table.cache_clear()
+    handler._s3.cache_clear()
 
 
 @pytest.fixture
@@ -81,6 +86,11 @@ def event(key=KEY, name="ObjectCreated:Post"):
     return {"Records": [{"eventName": name, "s3": {"bucket": {"name": "docs"}, "object": {"key": key}}}]}
 
 
+def metadata_file(key=KEY):
+    body = boto3.client("s3").get_object(Bucket="docs", Key=key + ".metadata.json")["Body"].read()
+    return json.loads(body)
+
+
 def record(table):
     return table.get_item(Key={"PK": f"PROJECT#{PID}", "SK": f"DOC#{DID}"})["Item"]
 
@@ -96,8 +106,10 @@ def test_happy_path(table, bedrock):
     assert call["knowledgeBaseId"] == "KB1" and call["dataSourceId"] == "DS1" and call["clientToken"] == DID
     document = call["documents"][0]
     assert document["content"]["s3"]["s3Location"]["uri"] == f"s3://docs/{KEY}"
-    attributes = {a["key"]: a["value"]["stringValue"] for a in document["metadata"]["inlineAttributes"]}
-    assert attributes == {"project_id": PID, "owner_id": "alice", "doc_id": DID, "filename": "report.pdf"}
+    assert document["metadata"] == {"type": "S3_LOCATION", "s3Location": {"uri": f"s3://docs/{KEY}.metadata.json"}}
+    assert metadata_file() == {
+        "metadataAttributes": {"project_id": PID, "owner_id": "alice", "doc_id": DID, "filename": "report.pdf"}
+    }
 
 
 def test_duplicate_event_is_a_no_op(table, bedrock):
@@ -141,8 +153,7 @@ def test_filename_mismatch_fails_the_record_and_skips_bedrock(table, bedrock):
 def test_owner_comes_from_the_record_not_the_key(table, bedrock):
     put_doc(table, owner="alice")
     handler.main(event(f"projects/{PID}/{DID}/report.pdf"))
-    owners = {a["value"]["stringValue"] for a in bedrock.calls[0]["documents"][0]["metadata"]["inlineAttributes"]}
-    assert "alice" in owners
+    assert metadata_file()["metadataAttributes"]["owner_id"] == "alice"
 
 
 def test_bedrock_error_marks_failed(table, bedrock):
@@ -164,6 +175,18 @@ def test_non_create_events_and_test_events_are_ignored(table, bedrock):
     assert handler.main(event(name="ObjectRemoved:Delete")) == {}
     assert handler.main({"Service": "Amazon S3", "Event": "s3:TestEvent"}) == {}
     assert bedrock.calls == []
+
+
+def test_the_metadata_object_it_writes_is_ignored(table, bedrock):
+    put_doc(table)
+    handler.main(event())
+    assert handler.main(event(KEY + ".metadata.json")) == {"metadata": 1}
+    assert len(bedrock.calls) == 1 and record(table)["status"] == "INGESTING"
+
+
+def test_no_metadata_file_when_the_record_is_missing(table, bedrock):
+    handler.main(event())
+    assert boto3.client("s3").list_objects_v2(Bucket="docs")["KeyCount"] == 0
 
 
 def test_batch_of_records(table, bedrock):

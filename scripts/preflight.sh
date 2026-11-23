@@ -15,7 +15,7 @@ set -uo pipefail
 
 STAGE="${1:-dev}"
 REGION="${CDK_DEFAULT_REGION:-$(aws configure get region 2>/dev/null || echo us-east-1)}"
-PROFILE_ID="${KC_MODEL_PROFILE_ID:-global.anthropic.claude-haiku-4-5-20251001-v1:0}"
+PROFILE_ID="${KC_MODEL_PROFILE_ID:-global.amazon.nova-2-lite-v1:0}"
 BASE_MODEL="${PROFILE_ID#global.}"
 FAILS=0
 
@@ -56,6 +56,12 @@ status() { aws_q bedrock get-foundation-model --model-identifier "$1" --query 'm
 [ "$(status "$BASE_MODEL")" = "ACTIVE" ] && pass "chat model ${BASE_MODEL} is active" || fail "chat model ${BASE_MODEL} is not available in ${REGION}"
 PSTATUS="$(aws_q bedrock list-inference-profiles --query "inferenceProfileSummaries[?inferenceProfileId=='${PROFILE_ID}'].status | [0]" --output text || true)"
 [ "$PSTATUS" = "ACTIVE" ] && pass "inference profile ${PROFILE_ID} is active" || fail "inference profile ${PROFILE_ID} not found (list yours: aws bedrock list-inference-profiles)"
+# "ACTIVE" above does not mean the account may call it: Anthropic models refuse every call until the one-time use-case form is
+# submitted (found on a real deployment). Amazon models, such as the default Nova 2 Lite, need no form.
+if [[ "$BASE_MODEL" == anthropic.* ]]; then
+  if aws_q bedrock get-use-case-for-model-access >/dev/null 2>&1; then pass "Anthropic use-case form submitted for this account"
+  else fail "Anthropic use-case form not submitted: every model call would fail. Submit it in the Bedrock console, or use the default Amazon Nova model"; fi
+fi
 
 section "Services used by the stacks"
 aws_q s3vectors list-vector-buckets --max-results 1 >/dev/null && pass "S3 Vectors" || fail "S3 Vectors is not available in ${REGION}"

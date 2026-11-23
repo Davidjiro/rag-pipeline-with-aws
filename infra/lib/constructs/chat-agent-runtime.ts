@@ -4,7 +4,7 @@
  * WHAT IT IS
  *   You give AgentCore a CONTAINER IMAGE that serves HTTP on port 8080 (`POST /invocations`, `GET /ping`). AgentCore runs
  *   it for you: one isolated microVM per SESSION (here: one per chat), scale to zero when idle, long-running requests,
- *   streaming responses, and the caller is authenticated with IAM (SigV4). The agent framework is your choice (Strands here)
+ *   streaming responses, and the caller is authenticated with IAM (SigV4). The agent code is your choice (plain boto3 over the Bedrock Converse API here)
  *   because AgentCore only cares about the HTTP contract.
  *
  * WHAT THIS CONSTRUCT CREATES
