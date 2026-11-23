@@ -108,7 +108,7 @@ cd infra && npm ci
 export KC_BUDGET_EMAIL=you@example.com     # recommended
 ../scripts/preflight.sh dev                # read-only: account, quotas, models, services, name clashes
 npm run verify                             # optional but cheap: the whole pipeline
-npx cdk deploy "kc-dev-*" --require-approval broadening
+npm run deploy                             # builds web/, then cdk deploy "kc-dev-*" (KC_STAGE=prod for prod)
 ../scripts/smoke-test.sh dev               # wiring checks against the deployed stacks
 ```
 
@@ -119,8 +119,7 @@ After the first deploy:
 
 ```bash
 # 1. there is no public sign-up: create your user (the temporary password arrives by e-mail)
-aws cognito-idp admin-create-user --user-pool-id <UserPoolId> --username you@example.com \
-  --user-attributes Name=email,Value=you@example.com Name=email_verified,Value=true
+../scripts/invite-user.sh you@example.com
 # 2. keep the agent's logs for 7 days instead of forever (run again after the first agent invocation)
 ../scripts/set-agent-log-retention.sh dev
 ```

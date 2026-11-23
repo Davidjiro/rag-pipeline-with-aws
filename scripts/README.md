@@ -2,15 +2,16 @@
 
 | Script | When | Changes AWS? | What it does |
 |--------|------|--------------|--------------|
-| `verify.sh` | any time, and in CI | no | the nine-layer proof: format, types, tests, synth with cdk-nag, cfn-lint, AWS template validation, python compile, backend lint and tests, agent lint and tests. Uses `backend/.venv` and `agent/.venv` (separate, because both services have a package named `app`); override with `BACKEND_PYTHON` / `AGENT_PYTHON` |
+| `verify.sh` | any time, and in CI | no | the ten-layer proof: format, types, tests, synth with cdk-nag, cfn-lint, AWS template validation, python compile, backend lint and tests, agent lint and tests, web checks and build. Uses `backend/.venv` and `agent/.venv` (separate, because both services have a package named `app`); override with `BACKEND_PYTHON` / `AGENT_PYTHON` |
 | `preflight.sh [stage]` | before the first deploy | no (read-only) | checks tools, credentials, CDK bootstrap, Lambda quota, Bedrock models and inference profile, the services the stacks use, and name clashes |
 | `smoke-test.sh [stage]` | right after deploy | writes then deletes one tiny object | checks CloudFront, the SPA routing, `/api/health` through CloudFront and directly, the agent, invite-only sign-in, the Knowledge Base status, and the S3 ingest trigger |
+| `invite-user.sh <email> [stage] [--resend]` | to give someone access | creates one Cognito user | Cognito e-mails a temporary password; the app asks for a new one at first sign-in |
 | `teardown.sh [dev]` | when finished | **yes: deletes the dev stacks** | `cdk destroy`, then removes the log groups AgentCore and the CDK helper Lambdas create outside CloudFormation. Refuses prod |
 | `set-agent-log-retention.sh [stage] [days]` | once after the first agent invocation | sets one log retention | AgentCore creates its own log group, so CloudFormation cannot set its retention |
 
 ```bash
 bash scripts/preflight.sh dev      # ready to deploy?
-(cd infra && npx cdk deploy "kc-dev-*")
+(cd infra && npm run deploy)
 bash scripts/smoke-test.sh dev     # did it wire up?
 ```
 

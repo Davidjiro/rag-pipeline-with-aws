@@ -4,10 +4,10 @@
  * Deployed last: CloudFront needs the API's Function URL as an origin, and the app's runtime configuration needs the Cognito
  * ids. Its output `WebUrl` is the address to open in the browser.
  */
-import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
+import { Annotations, CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { EnvironmentConfig } from '../config/environments';
-import { PATHS } from '../config/paths';
+import { webAppDir } from '../config/paths';
 import { WebDistribution } from '../constructs/web-distribution';
 import { ApiStack } from './api-stack';
 import { AuthStack } from './auth-stack';
@@ -26,12 +26,21 @@ export class WebStack extends Stack {
   constructor(scope: Construct, id: string, props: WebStackProps) {
     super(scope, id, props);
 
+    const app = webAppDir();
+    if (app.isPlaceholder) {
+      Annotations.of(this).addWarningV2(
+        'kc:web-placeholder',
+        'web/dist is missing: the placeholder page will be published. Deploy with `npm run deploy` (builds the app first).',
+      );
+    }
     this.web = new WebDistribution(this, 'Web', {
-      webDistDir: PATHS.webDistDir,
+      webDistDir: app.dir,
       apiFunctionUrl: props.api.api.functionUrl,
       docsBucketDomainName: props.knowledge.docsBucket.bucketRegionalDomainName,
       userPoolId: props.auth.pool.userPool.userPoolId,
       userPoolClientId: props.auth.pool.client.userPoolClientId,
+      maxFileMb: props.config.limits.maxFileMb,
+      allowedExtensions: props.config.limits.allowedExtensions,
       removalPolicy: props.config.removalPolicy,
     });
 

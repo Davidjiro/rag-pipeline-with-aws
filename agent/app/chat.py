@@ -18,6 +18,7 @@ Events: {"type":"token","text":...}, {"type":"citations","citations":[...]}, {"t
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -29,6 +30,18 @@ from .request import ChatRequest
 from .retrieval import Evidence, format_for_model
 
 log = logging.getLogger(__name__)
+
+# A message that is only a greeting or thanks gets a fixed, friendly reply: no guardrail, model or search call, so it
+# costs nothing. Anything longer goes through the normal flow (and the no-evidence rule).
+_GREETING = re.compile(
+    r"\s*(hi|hello|hey|hiya|good (morning|afternoon|evening)|thanks|thank you|thx|cheers)( there)?[\s!.,:)]*",
+    re.IGNORECASE,
+)
+
+
+def is_greeting(text: str) -> bool:
+    return len(text) <= 40 and _GREETING.fullmatch(text) is not None
+
 
 # (history, question, search function) -> answer text, streamed
 Answer = Callable[[tuple, str, Callable[[str], str]], Iterator[str]]
@@ -49,6 +62,10 @@ def _event(kind: str, **fields: Any) -> dict:
 
 def run(request: ChatRequest, deps: ChatDeps) -> Iterator[dict]:
     try:
+        if is_greeting(request.text):
+            yield _event("token", text=prompts.GREETING_MESSAGE)
+            yield _event("citations", citations=[])
+            return
         if deps.guardrail.blocks(request.text):
             log.info("Question blocked by the guardrail (chat %s)", request.chat_id)
             yield _event("token", text=prompts.BLOCKED_MESSAGE)

@@ -25,6 +25,7 @@ NO_EVIDENCE_MESSAGE = " ".join(
         "Check that the files finished processing, or try rephrasing the question.",
     ]
 )
+GREETING_MESSAGE = "Hello! Ask me a question about the documents in this project, and I will answer from them with sources."
 BLOCKED_MESSAGE = "I can't help with that request."
 SEARCH_LIMIT_MESSAGE = "Search limit reached for this question. Answer with the passages already returned."
 NO_RESULTS_MESSAGE = "No relevant passages found."

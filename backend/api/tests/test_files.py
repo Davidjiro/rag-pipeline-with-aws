@@ -26,6 +26,8 @@ def test_request_upload_returns_locked_down_presigned_post(api, store):
 
     assert body["filename"] == "Report_2024.pdf" and body["status"] == "PENDING_UPLOAD"
     assert body["max_bytes"] == 1024 * 1024
+    # The regional host: the only one the web app's Content Security Policy allows (see clients.s3)
+    assert body["upload"]["url"] == "https://test-docs.s3.us-east-1.amazonaws.com/"
     fields = body["upload"]["fields"]
     assert fields["key"] == f"projects/{pid}/{body['doc_id']}/Report_2024.pdf"
     assert fields["Content-Type"] == "application/pdf"

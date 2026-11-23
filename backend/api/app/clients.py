@@ -26,9 +26,15 @@ def dynamodb_table():
 
 @lru_cache
 def s3():
-    """S3 client. Signature v4 is required for presigned POST and GET URLs."""
+    """S3 client. Signature v4 is required for presigned POST and GET URLs.
+
+    The regional endpoint matters: in us-east-1 boto3 otherwise signs URLs for the global host `<bucket>.s3.amazonaws.com`,
+    and the web app's Content Security Policy allows only `<bucket>.s3.<region>.amazonaws.com`, so the browser would block
+    every upload (found while building the web app; infra/lib/constructs/web-distribution.ts sets the policy).
+    """
     settings = get_settings()
-    return boto3.client("s3", region_name=settings.region, config=Config(signature_version="s3v4", retries=_RETRY))
+    config = Config(signature_version="s3v4", retries=_RETRY, s3={"us_east_1_regional_endpoint": "regional"})
+    return boto3.client("s3", region_name=settings.region, config=config)
 
 
 @lru_cache

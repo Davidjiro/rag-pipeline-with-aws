@@ -8,6 +8,7 @@ import { App, RemovalPolicy, Stack, Validations } from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { AwsSolutionsChecks } from 'cdk-nag';
 import { agentName, baseModelId, ENVIRONMENTS, resourceName } from '../lib/config/environments';
+import { webAppDir } from '../lib/config/paths';
 import { buildApp } from './helpers';
 
 describe('app', () => {
@@ -66,6 +67,20 @@ describe('naming', () => {
 
   test('an over-long agent name fails at synth time, not at deploy time', () => {
     expect(() => agentName(ENVIRONMENTS.dev, 'x'.repeat(60))).toThrow(/Invalid AgentCore name/);
+  });
+});
+
+describe('web app folder', () => {
+  test('publishes the build when it exists, otherwise the placeholder', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kc-web-'));
+    const dist = path.join(root, 'dist');
+    const placeholder = path.join(root, 'placeholder');
+    expect(webAppDir(dist, placeholder)).toEqual({ dir: placeholder, isPlaceholder: true });
+    fs.mkdirSync(dist);
+    expect(webAppDir(dist, placeholder).isPlaceholder).toBe(true); // an empty folder is not a build
+    fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html>');
+    expect(webAppDir(dist, placeholder)).toEqual({ dir: dist, isPlaceholder: false });
+    fs.rmSync(root, { recursive: true });
   });
 });
 

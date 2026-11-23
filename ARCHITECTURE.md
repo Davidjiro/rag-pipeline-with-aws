@@ -15,7 +15,9 @@ Under normal use the cost is dominated by model tokens (section 11).
 | 2 | **CDK infrastructure** (`infra/`), with placeholder application code so every image and asset builds | **done and verified**: format, types, unit tests, cdk-nag, cfn-lint, AWS template validation, local arm64 container checks. Deployed once to a development account, smoke-tested, then destroyed |
 | 3 | **Backend** (`backend/`): FastAPI routes and the ingest Lambda | **done and verified**: 138 tests (auth, tenancy, uploads, indexing state, streaming, deletion, ingest) with simulated AWS, lint, arm64 image import check. Not yet exercised against real AWS |
 | 4 | **Agent** (`agent/`): boto3 tool loop, search tool, streaming and citations | **done and verified**: 69 tests (the loop against scripted Bedrock streams in the real event format), lint, arm64 container checks. Deployed with the backend and tested end to end against real AWS and Nova 2 Lite: 39 of 39 checks passed (see below), then destroyed |
-| 5 | Web UI: React app | planned |
+| 5 | **Web UI** (`web/`): React app | **done, local checks**: 49 tests, strict TypeScript, production build checked against the CSP. Browser test on a deployment pending |
+
+- Building the UI found that boto3 signs us-east-1 upload links for the global S3 host, which the site's CSP blocks. The API now uses the regional endpoint.
 
 ### End-to-end test on a real deployment (39 checks, all passed)
 

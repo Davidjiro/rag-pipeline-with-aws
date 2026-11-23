@@ -4,7 +4,7 @@ A web app for uploading documents into a project knowledge base and chatting wit
 Built on Amazon Bedrock (Knowledge Bases on S3 Vectors, Guardrails) and Bedrock AgentCore, deployed with TypeScript CDK.
 Designed to be cheap: nothing bills by the hour, and cost is dominated by model tokens.
 
-**Status: infrastructure (deployed once and smoke-tested), backend and agent are implemented and tested with simulated AWS. The UI is the next stage. The backend and agent have not yet run together against real AWS.**
+**Status: all five stages are implemented. Infrastructure, backend and agent passed a 39-check end-to-end test on a real deployment (then destroyed). The web UI passes its local checks; its first browser test against a deployment is next.**
 Start with [ARCHITECTURE.md](ARCHITECTURE.md) (the design, cost model and risks) and [infra/README.md](infra/README.md) (the deployment runbook).
 
 ```
@@ -13,8 +13,8 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md) (the design, cost model and risks)
 ├── infra/               <- CDK app: six stacks, 70+ tests, cdk-nag security checks        [done]
 ├── backend/             <- FastAPI API and the S3-triggered ingest Lambda                  [done: 138 tests]
 ├── agent/               <- the chat agent container for AgentCore Runtime                  [done: 69 tests]
-├── web/                 <- single-page app, published through CloudFront                   [placeholder]
-├── scripts/             <- verify, preflight, smoke test, log retention
+├── web/                 <- single-page app, published through CloudFront                   [done: 49 tests]
+├── scripts/             <- verify, preflight, smoke test, invite a user, teardown
 └── .github/workflows/   <- CI: the same verification, no deployment, no credentials
 ```
 
@@ -35,11 +35,14 @@ cd infra && npm ci
 export KC_BUDGET_EMAIL=you@example.com        # recommended: spend alerts
 bash ../scripts/preflight.sh dev              # read-only: is this account ready?
 npm run verify                                # format, types, tests, cdk-nag, cfn-lint, AWS template validation
-npx cdk deploy "kc-dev-*"
+npm run deploy                                # builds the web app, then deploys the six stacks
 bash ../scripts/smoke-test.sh dev             # did it wire up?
+bash ../scripts/invite-user.sh you@example.com   # e-mails a temporary password; open the WebUrl output and sign in
 ```
 
-Requirements: Node 20+, AWS CLI v2 with credentials, Docker (images are built at deploy time), an account bootstrapped for CDK,
+When finished: `bash ../scripts/teardown.sh dev`. No console step is needed: the default model (Amazon Nova 2 Lite) needs no access form.
+
+Requirements: Node 22.13+, AWS CLI v2 with credentials, Docker (images are built at deploy time), an account bootstrapped for CDK,
 and access to Titan Text Embeddings v2 and the chat model. `preflight.sh` checks all of it.
 
 ## How the infrastructure is verified

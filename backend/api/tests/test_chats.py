@@ -43,7 +43,8 @@ def test_stream_shape_and_persistence(api, agent, store, s3):
     assert [e["type"] for e in seen] == ["token", "token", "citations", "done"]
     cite = seen[2]["citations"][0]
     assert cite["number"] == 1
-    assert cite["filename"] == "policy.pdf" and "X-Amz-Signature" in cite["url"] and "test-docs" in cite["url"]
+    assert cite["filename"] == "policy.pdf" and "X-Amz-Signature" in cite["url"]
+    assert cite["url"].startswith("https://test-docs.s3.us-east-1.amazonaws.com/")
 
     messages = api.get(f"/projects/{pid}/chats/{cid}/messages").json()
     assert [(m["role"], m["text"]) for m in messages] == [

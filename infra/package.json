@@ -9,7 +9,9 @@
     "synth": "cdk synth --quiet",
     "format": "prettier --write \"{bin,lib,test}/**/*.ts\"",
     "format:check": "prettier --check \"{bin,lib,test}/**/*.ts\"",
-    "verify": "bash ../scripts/verify.sh"
+    "verify": "bash ../scripts/verify.sh",
+    "build:web": "npm --prefix ../web ci --no-audit --no-fund && npm --prefix ../web run build",
+    "deploy": "npm run build:web && cdk deploy \"kc-${KC_STAGE:-dev}-*\" -c stage=${KC_STAGE:-dev} --require-approval broadening"
   },
   "dependencies": {
     "aws-cdk-lib": "2.276.0",

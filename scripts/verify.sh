@@ -13,6 +13,7 @@
 #   7 python      the application sources compile
 #   8 backend     ruff lint + format check, pytest (API, ingest, contracts) with fakes for AWS
 #   9 agent       ruff lint + format check, pytest (the boto3 agent loop with a scripted Bedrock stream; no model calls)
+#  10 web         prettier check, tsc (strict), vitest, production build
 #
 # A layer that cannot run (for example cfn-lint is not installed) is reported as SKIPPED, never as passed.
 
@@ -88,6 +89,10 @@ agent_checks() {
 if "$AGENT_PY" -c "import boto3, bedrock_agentcore, pytest, httpx" >/dev/null 2>&1 && "$AGENT_PY" -m ruff --version >/dev/null 2>&1; then
   run "9 agent (ruff, pytest)" agent_checks
 else skip "9 agent" "dependencies missing: pip install -r agent/requirements.txt -r agent/requirements-dev.txt (separate venv from the backend)"; fi
+
+if [ -d "$ROOT/web/node_modules" ]; then
+  run "10 web (prettier, tsc, vitest, build)" npm --prefix "$ROOT/web" run --silent verify
+else skip "10 web" "dependencies missing: npm ci --prefix web"; fi
 
 printf '\n==================== SUMMARY ====================\n'
 for r in "${RESULTS[@]}"; do printf '  %-8s %s\n' "${r#*|}" "${r%%|*}"; done

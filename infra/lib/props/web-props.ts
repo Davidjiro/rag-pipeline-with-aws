@@ -13,6 +13,9 @@ export interface WebDistributionProps {
   readonly docsBucketDomainName: string;
   readonly userPoolId: string;
   readonly userPoolClientId: string;
+  /** Upload limits the app checks before asking for an upload (the API enforces them again). */
+  readonly maxFileMb: number;
+  readonly allowedExtensions: readonly string[];
   /** DESTROY for dev (also empties the bucket), RETAIN for prod. */
   readonly removalPolicy: RemovalPolicy;
 }

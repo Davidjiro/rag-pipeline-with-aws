@@ -141,6 +141,8 @@ export class WebDistribution extends Construct {
           userPoolId: props.userPoolId,
           userPoolClientId: props.userPoolClientId,
           apiBasePath: '/api',
+          maxFileMb: props.maxFileMb,
+          allowedExtensions: props.allowedExtensions,
         }),
       ],
       destinationBucket: this.webBucket.bucket,
