@@ -140,12 +140,18 @@ One-time setup, from your machine with your own AWS credentials:
 
 ```bash
 cd infra
-npx cdk -a "npx ts-node --prefer-ts-exts bin/ci-access.ts" deploy -c githubRepo=<owner>/<repo>
+curl -s https://api.github.com/repos/<owner>/<repo>      # note "id" (the repository) and "owner": {"id"}
+npx cdk -a "npx ts-node --prefer-ts-exts bin/ci-access.ts" deploy \
+  -c githubRepo=<owner>/<repo> -c githubOwnerId=<owner id> -c githubRepoId=<repository id>
 # prints kc-ci-github-access.RoleArn = arn:aws:iam::<account>:role/kc-ci-github-deploy-test
 ```
 
 Then in GitHub: Settings > Secrets and variables > Actions > **Variables** > New repository variable, name `AWS_ROLE_ARN`, value the ARN above.
-It is not a secret. To run: Actions > deploy-test > Run workflow. The run refuses to start if `kc-dev` stacks already exist, so it never
+It is not a secret.
+
+The ids are needed because GitHub identifies this repository as `repo:<owner>@<owner id>/<repo>@<repo id>:ref:...` in its token; a rule with
+the names alone is refused (`Not authorized to perform sts:AssumeRoleWithWebIdentity`). If you see that error, AWS CloudTrail's
+`AssumeRoleWithWebIdentity` events show the exact identity GitHub sent. To run: Actions > deploy-test > Run workflow. The run refuses to start if `kc-dev` stacks already exist, so it never
 replaces a deployment you are using. To remove CI access, run the same `cdk` command with `destroy`.
 
 ## Accepted deviations (cdk-nag `AwsSolutions`)

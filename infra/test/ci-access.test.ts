@@ -41,6 +41,19 @@ test('a different branch can be chosen, and a malformed repository is refused at
   expect(() => synth({ githubRepo: '*' })).toThrow(/owner\/name/);
 });
 
+test('with GitHub ids, the subject uses the immutable-id format GitHub sends', () => {
+  const role = Object.values(
+    synth({ githubOwnerId: '111', githubRepoId: '222' }).findResources('AWS::IAM::Role'),
+  )[0] as any;
+  expect(
+    role.Properties.AssumeRolePolicyDocument.Statement[0].Condition.StringEquals[
+      'token.actions.githubusercontent.com:sub'
+    ],
+  ).toBe('repo:owner@111/repo@222:ref:refs/heads/main');
+  expect(() => synth({ githubOwnerId: '111' })).toThrow(/both/);
+  expect(() => synth({ githubOwnerId: '1*', githubRepoId: '2' })).toThrow(/numbers/);
+});
+
 test('creates the OIDC provider unless an existing one is passed', () => {
   synth().resourceCountIs('AWS::IAM::OIDCProvider', 1);
   synth({

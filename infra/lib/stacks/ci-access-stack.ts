@@ -26,6 +26,14 @@ export const GITHUB_OIDC_URL = 'https://token.actions.githubusercontent.com';
 export interface CiAccessStackProps extends StackProps {
   /** `owner/name` of the GitHub repository allowed to assume the role. */
   readonly githubRepo: string;
+  /**
+   * GitHub's numeric ids of the owner and the repository. GitHub puts them in the token's `sub`
+   * (`repo:<owner>@<ownerId>/<repo>@<repoId>:ref:...`) for repositories that use the immutable-id format, which this one does
+   * (found on the first run). With them, a repository deleted and re-created under the same name is refused.
+   * Find them with: curl -s https://api.github.com/repos/<owner>/<repo>  (fields `owner.id` and `id`).
+   */
+  readonly githubOwnerId?: string;
+  readonly githubRepoId?: string;
   /** Branch allowed to assume the role. Default `main`. */
   readonly branch?: string;
   /** ARN of an existing GitHub OIDC provider in the account. An account can hold only one per URL; omit to create it. */
@@ -41,6 +49,16 @@ export class CiAccessStack extends Stack {
       throw new Error(`githubRepo must look like "owner/name", got "${props.githubRepo}"`);
     }
     const branch = props.branch ?? 'main';
+    if (Boolean(props.githubOwnerId) !== Boolean(props.githubRepoId)) {
+      throw new Error('Pass both githubOwnerId and githubRepoId, or neither');
+    }
+    for (const id of [props.githubOwnerId, props.githubRepoId]) {
+      if (id !== undefined && !/^\d{1,20}$/.test(id)) throw new Error(`GitHub ids are numbers, got "${id}"`);
+    }
+    const [owner, repo] = props.githubRepo.split('/');
+    const subject = props.githubOwnerId
+      ? `repo:${owner}@${props.githubOwnerId}/${repo}@${props.githubRepoId}:ref:refs/heads/${branch}`
+      : `repo:${props.githubRepo}:ref:refs/heads/${branch}`;
     const { account, region } = this;
 
     const provider = props.existingOidcProviderArn
@@ -55,7 +73,7 @@ export class CiAccessStack extends Stack {
         StringEquals: {
           'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
           // Exact match: one repository, one branch. Pull requests and forks get a different `sub` and are refused.
-          'token.actions.githubusercontent.com:sub': `repo:${props.githubRepo}:ref:refs/heads/${branch}`,
+          'token.actions.githubusercontent.com:sub': subject,
         },
       }),
     });
