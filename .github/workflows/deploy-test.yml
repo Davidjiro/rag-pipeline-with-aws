@@ -1,0 +1,96 @@
+name: deploy-test
+
+# Deploys the dev stacks to AWS, runs the smoke test and the end-to-end test, then ALWAYS tears everything down.
+# Manual only (Actions tab > deploy-test > Run workflow), so pushes never create AWS costs. A run costs cents to about $1.
+#
+# AWS access: GitHub's OIDC token is exchanged for short-lived credentials of the role in infra/lib/stacks/ci-access-stack.ts.
+# That role trusts only this repository's main branch. No AWS keys are stored in GitHub; the role ARN is a repository variable.
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write # to request the OIDC token
+  contents: read
+
+concurrency:
+  group: deploy-test-dev # one run at a time: two runs would deploy over each other
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  STAGE: dev
+
+jobs:
+  deploy-test:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm # arm64, like Lambda and AgentCore: the container images build natively
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 7200
+
+      - name: Refuse to run over an existing dev deployment
+        run: |
+          existing="$(aws cloudformation list-stacks \
+            --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE CREATE_IN_PROGRESS UPDATE_IN_PROGRESS DELETE_FAILED \
+            --query "StackSummaries[?starts_with(StackName,'kc-${STAGE}-')].StackName" --output text)"
+          if [ -n "$existing" ]; then
+            echo "::error::kc-${STAGE} stacks already exist ($existing). This run would replace and then delete them. Tear them down first."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            infra/package-lock.json
+            web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          npm ci --prefix infra
+          npm ci --prefix web
+          pip install cfn-lint
+          python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/api/requirements.txt -r backend/requirements-dev.txt
+          python -m venv agent/.venv && agent/.venv/bin/pip install -r agent/requirements.txt -r agent/requirements-dev.txt
+          python -m venv /tmp/e2e && /tmp/e2e/bin/pip install -r scripts/requirements-e2e.txt
+
+      - name: Verify (all ten layers, before anything is deployed)
+        run: bash scripts/verify.sh
+
+      - name: Deploy
+        id: deploy
+        working-directory: infra
+        run: |
+          npm run build:web
+          npx cdk deploy "kc-${STAGE}-*" -c stage=${STAGE} --require-approval never --progress events
+
+      - name: Smoke test
+        run: bash scripts/smoke-test.sh ${STAGE}
+
+      - name: End-to-end test
+        run: /tmp/e2e/bin/python scripts/e2e-test.py ${STAGE}
+
+      - name: Tear down (always, even when a step failed)
+        if: always() && steps.deploy.outcome != 'skipped'
+        run: bash scripts/teardown.sh ${STAGE}
+
+      - name: Confirm nothing is left
+        if: always() && steps.deploy.outcome != 'skipped'
+        run: |
+          left="$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE DELETE_FAILED UPDATE_ROLLBACK_COMPLETE \
+            --query "StackSummaries[?starts_with(StackName,'kc-${STAGE}-')].StackName" --output text)"
+          if [ -n "$left" ]; then
+            echo "::error::Stacks still exist after teardown: $left. Run 'bash scripts/teardown.sh ${STAGE}' from your machine."
+            exit 1
+          fi
+          echo "All kc-${STAGE} stacks are gone."

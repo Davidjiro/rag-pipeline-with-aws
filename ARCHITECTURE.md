@@ -21,6 +21,10 @@ Under normal use the cost is dominated by model tokens (section 11).
 
 ### End-to-end test on a real deployment (39 checks, all passed)
 
+The test is `scripts/e2e-test.py`. `.github/workflows/deploy-test.yml` runs it on demand: deploy, smoke test, end-to-end test, teardown, through a
+GitHub OIDC role limited to this repository's `main` branch and to `dev` resources (`infra/lib/stacks/ci-access-stack.ts`).
+
+
 Run against a fresh `dev` deployment with two test users, then destroyed. Covered: sign-in and 401s; presigned uploads, the S3 size policy and the
 reserved `.metadata.json` name; ingestion to `READY`; streamed answers through CloudFront (first byte about 0.3 s, a short answer in about 3 s,
 several token events); citations whose `[n]` matches the text and whose download link works; history on a follow-up; `multi_query`; an off-topic

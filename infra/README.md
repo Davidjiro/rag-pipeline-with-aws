@@ -129,6 +129,25 @@ Lambdas create outside CloudFormation (they survive a plain destroy and would ot
 Prod keeps its data and refuses deletion on purpose. Docker images pushed for the Lambda and the agent stay in the shared CDK bootstrap repository
 (a few cents a month at most) until you delete them.
 
+## CI deploy test (GitHub Actions)
+
+`.github/workflows/deploy-test.yml` deploys `dev`, runs `scripts/smoke-test.sh` and `scripts/e2e-test.py` (about 40 checks), then always tears
+down and checks that nothing is left. It runs only when started by hand, on GitHub's free arm64 runners. No AWS keys are stored in GitHub: the
+job exchanges GitHub's OIDC token for short-lived credentials of one role (`lib/stacks/ci-access-stack.ts`). That role trusts only this
+repository's `main` branch, deploys only through the CDK bootstrap roles, and its other permissions are limited to `kc-dev` resource names.
+
+One-time setup, from your machine with your own AWS credentials:
+
+```bash
+cd infra
+npx cdk -a "npx ts-node --prefer-ts-exts bin/ci-access.ts" deploy -c githubRepo=<owner>/<repo>
+# prints kc-ci-github-access.RoleArn = arn:aws:iam::<account>:role/kc-ci-github-deploy-test
+```
+
+Then in GitHub: Settings > Secrets and variables > Actions > **Variables** > New repository variable, name `AWS_ROLE_ARN`, value the ARN above.
+It is not a secret. To run: Actions > deploy-test > Run workflow. The run refuses to start if `kc-dev` stacks already exist, so it never
+replaces a deployment you are using. To remove CI access, run the same `cdk` command with `destroy`.
+
 ## Accepted deviations (cdk-nag `AwsSolutions`)
 
 Findings the project could fix were fixed. These remain, each acknowledged on the narrowest construct in `lib/nag-suppressions.ts`.

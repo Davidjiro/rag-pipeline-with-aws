@@ -6,6 +6,7 @@
 | `preflight.sh [stage]` | before the first deploy | no (read-only) | checks tools, credentials, CDK bootstrap, Lambda quota, Bedrock models and inference profile, the services the stacks use, and name clashes |
 | `smoke-test.sh [stage]` | right after deploy | writes then deletes one tiny object | checks CloudFront, the SPA routing, `/api/health` through CloudFront and directly, the agent, invite-only sign-in, the Knowledge Base status, and the S3 ingest trigger |
 | `invite-user.sh <email> [stage] [--resend]` | to give someone access | creates one Cognito user | Cognito e-mails a temporary password; the app asks for a new one at first sign-in |
+| `e2e-test.py [stage]` | after deploy, and in the CI deploy test | creates and deletes two test users and their data; a few model calls (cents) | about 40 checks through CloudFront: sign-in, uploads and the S3 policy, indexing, streamed answers, citations and download links, history, `multi_query`, greetings, off-topic and prompt-attack handling, tenancy between two users, deletion. Exits 1 on any failure. Needs `pip install -r scripts/requirements-e2e.txt` |
 | `teardown.sh [dev]` | when finished | **yes: deletes the dev stacks** | `cdk destroy`, then removes the log groups AgentCore and the CDK helper Lambdas create outside CloudFormation. Refuses prod |
 | `set-agent-log-retention.sh [stage] [days]` | once after the first agent invocation | sets one log retention | AgentCore creates its own log group, so CloudFormation cannot set its retention |
 

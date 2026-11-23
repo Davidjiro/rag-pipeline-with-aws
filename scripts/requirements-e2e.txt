@@ -1,0 +1,4 @@
+# Dependencies of scripts/e2e-test.py only. Pinned to the versions it was tested with.
+boto3==1.44.9
+requests==2.34.2
+pycognito==2024.5.1

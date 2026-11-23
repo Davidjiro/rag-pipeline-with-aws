@@ -1,4 +1,4 @@
-# bin/  -  the app entry point
+# bin/ - the app entry point
 
 `app.ts` is the file the CDK CLI runs (`"app"` in `../cdk.json`). It is three lines: it calls `createApp()` from
 `../lib/app-factory.ts` and synthesises the result.

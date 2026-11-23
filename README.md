@@ -15,7 +15,7 @@ Start with [ARCHITECTURE.md](ARCHITECTURE.md) (the design, cost model and risks)
 ├── agent/               <- the chat agent container for AgentCore Runtime                  [done: 69 tests]
 ├── web/                 <- single-page app, published through CloudFront                   [done: 49 tests]
 ├── scripts/             <- verify, preflight, smoke test, invite a user, teardown
-└── .github/workflows/   <- CI: the same verification, no deployment, no credentials
+└── .github/workflows/   <- ci: verification on every push; deploy-test: manual deploy, tests, teardown (OIDC, no stored keys)
 ```
 
 ## What gets deployed (six stacks, nothing billed by the hour)
