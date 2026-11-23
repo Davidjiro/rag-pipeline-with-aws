@@ -1,12 +1,16 @@
-# bin/ - the app entry point
+# bin/ - the CDK app entry points
 
-`app.ts` is the file the CDK CLI runs (`"app"` in `../cdk.json`). It is three lines: it calls `createApp()` from
-`../lib/app-factory.ts` and synthesises the result.
+| File | App | Deployed by |
+|------|-----|-------------|
+| `app.ts` | the six application stacks. The CDK CLI runs it by default (`"app"` in `../cdk.json`) | `npm run deploy`, or the deploy-test workflow |
+| `ci-access.ts` | one stack: the GitHub Actions OIDC role for the deploy-test workflow | a person, once (see `../README.md`, "CI deploy test") |
 
-The stacks are assembled in `lib/app-factory.ts`, not here, so the unit tests can build exactly the app that gets deployed.
+`app.ts` calls `createApp()` from `../lib/app-factory.ts`, so the unit tests build exactly the app that gets deployed. `ci-access.ts` is a
+separate app on purpose: `cdk deploy "kc-dev-*"` and teardown never touch the CI role.
 
 ```bash
 npx cdk deploy "kc-dev-*"                  # dev, the default stage
 npx cdk deploy "kc-prod-*" -c stage=prod   # prod
 npx cdk synth -c nag=off                   # skip the cdk-nag checks (experiments only, never in CI)
+npx cdk -a "npx ts-node --prefer-ts-exts bin/ci-access.ts" deploy -c githubRepo=<owner>/<repo>   # CI access, once
 ```
