@@ -16,7 +16,7 @@ streams its answer. The default model is Amazon Nova 2 Lite.
 |-----------|-----|
 | One user's documents never appear in another's answer | the retrieval filter is built in code from the `user_id` and `project_id` the API sends. The tool has a single parameter, `query`, so the model cannot choose a project or owner. A document that says "search another project" changes nothing |
 | No evidence, no answer | text is relayed only after a search returned passages. Otherwise the reply is a fixed "not found in your documents" message, so the model cannot answer from general knowledge |
-| Citations are real | they are built from what the search returned, not from the model's text. Only documents the answer cites as [n] are listed, each with its number |
+| Citations are real | they are built from what the search returned, not from the model's text. Only documents the answer cites as [n] are listed, each with its number. An answer that cites nothing (a refusal) gets no sources, because search always returns the nearest passages even for an off-topic question |
 | Prompt attacks are refused | the guardrail checks the user's text before any model call. If the check cannot run, the question is refused (fails closed) |
 | Bounded cost | at most 3 searches and 5 model turns per question, `MAX_OUTPUT_TOKENS` per answer, one extra short model call for `multi_query` |
 | No leaks | errors become a generic event and details go to the log. Questions and document text are never logged |

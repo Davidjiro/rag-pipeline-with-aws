@@ -140,16 +140,14 @@ class Evidence:
         return numbered
 
     def citations(self, answer: str = "") -> list[dict]:
-        """One entry per document with its number and best passage as the snippet.
+        """One entry per document the answer refers to as [n], with that number and its best passage as the snippet.
 
-        Only documents the answer refers to as [n] are kept, so the list matches the text. If the answer cites no valid number,
-        every document that was searched is listed instead, so the user can still check the sources.
+        An answer that cites nothing gets no sources. Semantic search always returns the nearest passages, even for an off-topic
+        question, so listing them under a refusal would show irrelevant documents as evidence (found on a real deployment).
         """
         with self._lock:
-            ordered = sorted(self._numbers, key=lambda source: self._numbers[source])
             cited = {int(n) for n in re.findall(r"\[(\d{1,3})\]", answer)}
-            if cited & set(self._numbers.values()):
-                ordered = [s for s in ordered if self._numbers[s] in cited]
+            ordered = sorted((s for s in self._numbers if self._numbers[s] in cited), key=lambda s: self._numbers[s])
             return [
                 {"number": self._numbers[s], "source": s, "snippet": self._best[s].text[:500], "score": self._best[s].score}
                 for s in ordered

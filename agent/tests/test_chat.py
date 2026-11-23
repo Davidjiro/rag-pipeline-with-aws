@@ -157,11 +157,12 @@ def test_citations_follow_the_numbers_in_the_answer(settings):
     assert [(c["number"], c["source"]) for c in cites] == [(2, DOC_B)]  # the number still matches the text
 
 
-def test_no_valid_citation_number_lists_every_searched_document(settings):
+def test_an_answer_that_cites_nothing_gets_no_sources(settings):
+    """Search always returns the nearest passages; a refusal must not show them as evidence."""
     retrieve = FakeRetrieveClient(default=[result(DOC_A, "A", 0.5), result(DOC_B, "B", 0.6)])
-    deps, _, _ = make_deps(settings, [[search("x")], [("text", "An answer without numbers [9].")]], retrieve=retrieve)
-    cites = list(run(make_request(), deps))[-1]["citations"]
-    assert [c["number"] for c in cites] == [1, 2]
+    for text in ("The documents do not mention the capital of Australia.", "Unknown number [9]."):
+        deps, _, _ = make_deps(settings, [[search("x")], [("text", text)]], retrieve=retrieve)
+        assert list(run(make_request(), deps))[-1] == {"type": "citations", "citations": []}
 
 
 def test_history_reaches_the_model(settings):

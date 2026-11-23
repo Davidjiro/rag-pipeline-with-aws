@@ -14,8 +14,16 @@ Under normal use the cost is dominated by model tokens (section 11).
 | 1 | Architecture (this document) | done |
 | 2 | **CDK infrastructure** (`infra/`), with placeholder application code so every image and asset builds | **done and verified**: format, types, unit tests, cdk-nag, cfn-lint, AWS template validation, local arm64 container checks. Deployed once to a development account, smoke-tested, then destroyed |
 | 3 | **Backend** (`backend/`): FastAPI routes and the ingest Lambda | **done and verified**: 138 tests (auth, tenancy, uploads, indexing state, streaming, deletion, ingest) with simulated AWS, lint, arm64 image import check. Not yet exercised against real AWS |
-| 4 | **Agent** (`agent/`): boto3 tool loop, search tool, streaming and citations | **done and verified locally**: 69 tests (the loop against scripted Bedrock streams in the real event format), lint, arm64 container answered `/ping` and `/invocations`, and the loop answered correctly against real Nova 2 Lite with a fake search. Full deployment test pending |
+| 4 | **Agent** (`agent/`): boto3 tool loop, search tool, streaming and citations | **done and verified**: 69 tests (the loop against scripted Bedrock streams in the real event format), lint, arm64 container checks. Deployed with the backend and tested end to end against real AWS and Nova 2 Lite: 39 of 39 checks passed (see below), then destroyed |
 | 5 | Web UI: React app | planned |
+
+### End-to-end test on a real deployment (39 checks, all passed)
+
+Run against a fresh `dev` deployment with two test users, then destroyed. Covered: sign-in and 401s; presigned uploads, the S3 size policy and the
+reserved `.metadata.json` name; ingestion to `READY`; streamed answers through CloudFront (first byte about 0.3 s, a short answer in about 3 s,
+several token events); citations whose `[n]` matches the text and whose download link works; history on a follow-up; `multi_query`; an off-topic
+question (no general-knowledge answer, no sources); the prompt-attack guardrail; test retrieval; every cross-user access answered 404, and user B's
+answers and retrieval never contained user A's document; file and project deletion leaving nothing in the index or in S3.
 
 ### Findings during implementation (all reflected in this document)
 
@@ -27,6 +35,7 @@ Under normal use the cost is dominated by model tokens (section 11).
 - A Knowledge Base with an S3 data source rejects inline metadata. Metadata is written as a `<file>.metadata.json` object next to each document.
 - Anthropic models refuse every call until a one-time per-account use-case form is submitted, even when the model shows as `ACTIVE`. The default model is therefore Amazon Nova 2 Lite, which needs no form. `preflight.sh` checks the form when an Anthropic model is chosen.
 - Nova may wrap reasoning in `<thinking>` tags around tool calls. The agent removes them from the streamed answer.
+- Semantic search always returns the nearest passages, even for an off-topic question. Sources are therefore listed only when the answer cites them as `[n]`; a refusal shows none.
 
 ---
 
