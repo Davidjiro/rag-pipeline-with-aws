@@ -3,7 +3,7 @@
 #
 # RUN AFTER `cdk deploy`. Proves the deployed infrastructure is wired together, using the real ingest function and agent. It creates one tiny object in the documents bucket and deletes it again. It does NOT call a model.
 #
-#   1  web          CloudFront serves the app shell
+#   1  web          CloudFront serves the app shell (the built app or, without a build, the placeholder: both have this title)
 #   2  spa routing  a deep link such as /projects/123 returns the app shell (the CloudFront Function)
 #   3  api path     /api/health through CloudFront reaches FastAPI (CloudFront -> Function URL -> Lambda Web Adapter)
 #   4  api direct   the Function URL answers the same health check
@@ -38,9 +38,9 @@ echo "Web: ${WEB}"
 
 printf '\n[1-4] HTTP paths\n'
 body="$(curl -fsS "${WEB}/" 2>/dev/null || true)"
-echo "$body" | grep -q "Bedrock Knowledge Chat" && pass "1 CloudFront serves the app shell" || fail "1 app shell not served at ${WEB}/"
+echo "$body" | grep -q "Knowledge Chat</title>" && pass "1 CloudFront serves the app shell" || fail "1 app shell not served at ${WEB}/"
 body="$(curl -fsS "${WEB}/projects/123" 2>/dev/null || true)"
-echo "$body" | grep -q "Bedrock Knowledge Chat" && pass "2 deep link returns the app shell" || fail "2 SPA routing: /projects/123 did not return the app"
+echo "$body" | grep -q "Knowledge Chat</title>" && pass "2 deep link returns the app shell" || fail "2 SPA routing: /projects/123 did not return the app"
 code="$(curl -sS -o /tmp/kc-health -w '%{http_code}' "${WEB}/api/health" 2>/dev/null || true)"
 grep -q '"status":"ok"' /tmp/kc-health 2>/dev/null && [ "$code" = "200" ] && pass "3 /api/health through CloudFront reaches FastAPI" || fail "3 /api/health via CloudFront returned HTTP ${code}: $(cat /tmp/kc-health 2>/dev/null)"
 code="$(curl -sS -o /tmp/kc-health2 -w '%{http_code}' "${API%/}/api/health" 2>/dev/null || true)"
